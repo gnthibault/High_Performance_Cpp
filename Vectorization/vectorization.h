@@ -115,17 +115,21 @@ __m128 shiftAdd(__m128 left, __m128 right)
 	__m128 result1 = (__m128)_mm_srli_si128( (__m128i)right, RS );
 	return _mm_add_ps( result0, result1 );
 }
-/*
+
 // forward-declaration to allow use in Iter
 template<typename T> class Sse2Vec<T>;
 
+/*
+ * An iterator must support an operator* method, an operator != method,
+ * and an operator++ method
+ */
 template<typename T>
 class Sse2Iter
 {
-    public:
-    Sse2Iter (const Sse2Vec* p_vec, int pos)
-        : _pos( pos )
-        , _p_vec( p_vec )
+public:
+    Sse2Iter (const Sse2Vec<T>* vec, size_t idx)
+        : m_idx( idx )
+        , m_vec( vec )
     { }
 
     // these three methods form the basis of an iterator for use with
@@ -133,16 +137,16 @@ class Sse2Iter
     bool
     operator!= (const Sse2Iter& other) const
     {
-        return _pos != other._pos;
+        return m_idx != other.m_idx;
     }
 
     // this method must be defined after the definition of Sse2Vec
     // since it needs to use it
-    int operator* () const;
+    T operator* () const;
 
     const Sse2Iter& operator++ ()
     {
-        ++_pos;
+        m_idx++;
         // although not strictly necessary for a range-based for loop
         // following the normal convention of returning a value from
         // operator++ is a good idea.
@@ -150,23 +154,34 @@ class Sse2Iter
     }
 
 private:
-    size_t m_pos;
+    size_t m_idx;
     const Sse2Vec *m_vec;
 };
 
+//Specialize Packed types when they exist
+template<typename T> struct PackedType { typedef T type; };//Default packed type is... not packed
+template<> struct PackedType<float> { using type = __m128; };
+template<> struct PackedType<int> { using type = __m128i; };
+template<typename T> using PackType = typename PackedType<T>::type;
+
+/*
+ * An iterable object must feature a begin and a end methods that return
+ * iterators to the beginning and end of the "vector"
+ */
+template<typename T>
 class Sse2Vec
 {
 public:
     Sse2Vec()=default;
 
-    Sse2Iter begin() const
+    Sse2Iter<T> begin() const
     {
-        return Sse2Iter( this, 0 );
+        return Sse2Iter<T>( this, 0 );
     }
 
-    Sse2Iter end() const
+    Sse2Iter<T> end() const
     {
-        return Sse2Iter( this,  );
+        return Sse2Iter<T>( this, m_vec.size() );
     }
 
 protected:
@@ -174,9 +189,9 @@ protected:
 };
 
 template<typename T>
-T Sse2Iter<T>::operator*() const
+Sse2Iter<T>::PackType Sse2Iter<T>::operator*() const
 {
-     return _p_vec->get( _pos );
-}*/
+     return load(m_vec->data()+m_idx);
+}
 
 #endif /* VECTORIZATION_H_ */
