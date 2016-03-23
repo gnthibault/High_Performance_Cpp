@@ -189,6 +189,20 @@ public:
         return Sse2Iter<T>( this, m_vec.size() );
     }
 
+    //This is an unsafe get, be carefull about what
+    //does the last index return if size was not a multiple
+    //of vector size
+    PackType<T> get( size_t idx ) const
+    {
+         return load(m_vec.data()+idx);
+    }
+
+    //Unsafe set
+    void set( size_t idx, PackType<T> val )
+	{
+		 store( m_vec.data()+idx, val );
+	}
+
 protected:
     std::vector<T,boost::alignment::aligned_allocator<T> > m_vec;
 };
