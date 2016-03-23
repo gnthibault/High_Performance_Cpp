@@ -134,20 +134,25 @@ template<typename T>
 class Sse2Iter
 {
 public:
-    Sse2Iter (const Sse2Vec<T>* vec, size_t idx) : m_idx( idx ), m_vec( vec ) {}
+    Sse2Iter(const Sse2Vec<T>* vec, size_t idx) : m_idx( idx ), m_vec( vec ) {}
 
     // these three methods form the basis of an iterator for use with
     // a range-based for loop
-    bool operator!= (const Sse2Iter& other) const
+    bool operator!=(const Sse2Iter& other) const
     {
         return m_idx != other.m_idx;
     }
 
     // this method must be defined after the definition of Sse2Vec
-    // since it needs to use it
+    // since it needs to use it, here we decide not to return
+    // a reference, modification will have to use the set method
     PackType<T> operator* () const;
 
-    const Sse2Iter& operator++ ()
+    // this method must be defined after the definition of Sse2Vec
+	// since it needs to use it
+    void set( PackType<T> val );
+
+    const Sse2Iter& operator++()
     {
     	// incrementing index accounting for the multiple elements
     	// of the packed type
@@ -210,7 +215,13 @@ protected:
 template<typename T>
 PackType<T> Sse2Iter<T>::operator*() const
 {
-     return load(m_vec->data()+m_idx);
+     return m_vec->get(m_idx);
+}
+
+template<typename T>
+void Sse2Iter<T>::set(PackType<T> val)
+{
+     return m_vec->set(m_idx, val);
 }
 
 #endif /* VECTORIZATION_H_ */
