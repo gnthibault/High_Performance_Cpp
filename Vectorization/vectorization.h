@@ -10,6 +10,7 @@
 
 //STL
 #include <vector>
+#include <exception>
 
 //Boost
 #include <boost/align/aligned_allocator.hpp>
@@ -117,7 +118,13 @@ __m128 shiftAdd(__m128 left, __m128 right)
 }
 
 // forward-declaration to allow use in Iter
-template<typename T> class Sse2Vec<T>;
+template<typename T> class Sse2Vec;
+
+//Specialize Packed types when they exist
+template<typename T> struct PackedType { typedef T type; };//Default packed type is... not packed
+template<> struct PackedType<float> { using type = __m128; };
+template<> struct PackedType<int> { using type = __m128i; };
+template<typename T> using PackType = typename PackedType<T>::type;
 
 /*
  * An iterator must support an operator* method, an operator != method,
@@ -127,26 +134,24 @@ template<typename T>
 class Sse2Iter
 {
 public:
-    Sse2Iter (const Sse2Vec<T>* vec, size_t idx)
-        : m_idx( idx )
-        , m_vec( vec )
-    { }
+    Sse2Iter (const Sse2Vec<T>* vec, size_t idx) : m_idx( idx ), m_vec( vec ) {}
 
     // these three methods form the basis of an iterator for use with
     // a range-based for loop
-    bool
-    operator!= (const Sse2Iter& other) const
+    bool operator!= (const Sse2Iter& other) const
     {
         return m_idx != other.m_idx;
     }
 
     // this method must be defined after the definition of Sse2Vec
     // since it needs to use it
-    T operator* () const;
+    PackType<T> operator* () const;
 
     const Sse2Iter& operator++ ()
     {
-        m_idx++;
+    	// incrementing index accounting for the multiple elements
+    	// of the packed type
+        m_idx+=(sizeof(PackType<T>)/sizeof(T));
         // although not strictly necessary for a range-based for loop
         // following the normal convention of returning a value from
         // operator++ is a good idea.
@@ -155,14 +160,8 @@ public:
 
 private:
     size_t m_idx;
-    const Sse2Vec *m_vec;
+    const Sse2Vec<T> *m_vec;
 };
-
-//Specialize Packed types when they exist
-template<typename T> struct PackedType { typedef T type; };//Default packed type is... not packed
-template<> struct PackedType<float> { using type = __m128; };
-template<> struct PackedType<int> { using type = __m128i; };
-template<typename T> using PackType = typename PackedType<T>::type;
 
 /*
  * An iterable object must feature a begin and a end methods that return
@@ -172,7 +171,13 @@ template<typename T>
 class Sse2Vec
 {
 public:
-    Sse2Vec()=default;
+    Sse2Vec(size_t size)
+	{
+    	size_t nbElementPerVector = sizeof(PackType<T>)/sizeof(T);
+    	//Compute the minimum number of vector that should be used
+    	size_t newSize = (size+nbElementPerVector-1)/nbElementPerVector;
+        m_vec.resize( newSize*nbElementPerVector );
+	}
 
     Sse2Iter<T> begin() const
     {
@@ -189,7 +194,7 @@ protected:
 };
 
 template<typename T>
-Sse2Iter<T>::PackType Sse2Iter<T>::operator*() const
+PackType<T> Sse2Iter<T>::operator*() const
 {
      return load(m_vec->data()+m_idx);
 }
