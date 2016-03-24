@@ -30,8 +30,8 @@
 
 int main()
 {
-	std::vector<float> vec(SIZEX*SIZEY,1.);
-	std::vector<float> out(SIZEX*SIZEY,0.);
+	std::vector<float> vec(SIZEX*SIZEY,1.f);
+	std::vector<float> out(SIZEX*SIZEY,0.f);
 
 	for(int j=0; j<SIZEY; j++ )
 	{
@@ -67,7 +67,7 @@ int main()
 	}
 
 	//Check if output is full of 1's
-	bool isOK = std::all_of(out.cbegin(),out.cend(),[&](float in){return in == 1.0;});
+	bool isOK = std::all_of(out.cbegin(),out.cend(),[](float in){return in == 1.f;});
 	std::cout << " Is result OK ? "<< isOK << std::endl;
 
 

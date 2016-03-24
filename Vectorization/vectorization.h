@@ -36,13 +36,13 @@ void store(int* ptr, __m128i value)
 }
 
 //Load a 128bits sse2 vector of float from a buffer
-__m128 load(float* ptr)
+__m128 load(const float* ptr)
 {
 	return _mm_load_ps( ptr );
 }
 
 //Load a 128bits sse2 vector of int from a buffer
-__m128i load(int* ptr)
+__m128i load(const int* ptr)
 {
 	return _mm_load_si128((__m128i*)(ptr));
 }
@@ -134,11 +134,11 @@ template<typename T>
 class Sse2Iter
 {
 public:
-    Sse2Iter(const Sse2Vec<T>* vec, size_t idx) : m_idx( idx ), m_vec( vec ) {}
+    Sse2Iter(Sse2Vec<T>* vec, size_t idx) : m_idx( idx ), m_vec( vec ) {}
 
     // these three methods form the basis of an iterator for use with
     // a range-based for loop
-    bool operator!=(const Sse2Iter& other) const
+    bool operator!=(const Sse2Iter<T>& other) const
     {
         return m_idx != other.m_idx;
     }
@@ -148,11 +148,14 @@ public:
     // a reference, modification will have to use the set method
     PackType<T> operator* () const;
 
+    //A simple alias for operator*
+    PackType<T> get() const { return *(*this); };
+
     // this method must be defined after the definition of Sse2Vec
 	// since it needs to use it
     void set( PackType<T> val );
 
-    const Sse2Iter& operator++()
+    Sse2Iter<T>& operator++() //prefix
     {
     	// incrementing index accounting for the multiple elements
     	// of the packed type
@@ -162,6 +165,40 @@ public:
         // operator++ is a good idea.
         return *this;
     }
+
+    Sse2Iter<T> operator++(int) //suffix
+	{
+	   m_idx+=(sizeof(PackType<T>)/sizeof(T));
+	   return *this;
+	}
+
+private:
+    size_t m_idx;
+    Sse2Vec<T> *m_vec;
+};
+//The const iterator
+template<typename T>
+class Sse2IterConst
+{
+public:
+	Sse2IterConst(const Sse2Vec<T>* vec, size_t idx) : m_idx( idx ), m_vec( vec ) {}
+
+    bool operator!=(const Sse2IterConst<T>& other) const
+    {
+        return m_idx != other.m_idx;
+    }
+    PackType<T> operator* () const;
+    PackType<T> get() const { return *(*this); };
+    Sse2IterConst<T>& operator++() //prefix
+    {
+        m_idx+=(sizeof(PackType<T>)/sizeof(T));
+        return *this;
+    }
+    Sse2IterConst<T> operator++(int) //suffix
+	{
+	   m_idx+=(sizeof(PackType<T>)/sizeof(T));
+	   return *this;
+	}
 
 private:
     size_t m_idx;
@@ -176,23 +213,40 @@ template<typename T>
 class Sse2Vec
 {
 public:
-    Sse2Vec(size_t size)
+    Sse2Vec(size_t size, T initVal = (T)0)
 	{
     	size_t nbElementPerVector = sizeof(PackType<T>)/sizeof(T);
     	//Compute the minimum number of vector that should be used
     	size_t newSize = (size+nbElementPerVector-1)/nbElementPerVector;
-        m_vec.resize( newSize*nbElementPerVector );
+        m_vec.resize( newSize*nbElementPerVector, initVal );
 	}
 
-    Sse2Iter<T> begin() const
+    Sse2Iter<T> begin()
     {
         return Sse2Iter<T>( this, 0 );
     }
-
-    Sse2Iter<T> end() const
+    Sse2IterConst<T> cbegin() const
+    {
+        return Sse2IterConst<T>( this, 0 );
+    }
+    Sse2Iter<T> end()
     {
         return Sse2Iter<T>( this, m_vec.size() );
     }
+    Sse2IterConst<T> cend() const
+	{
+		return Sse2IterConst<T>( this, m_vec.size() );
+	}
+
+    //We also authorize non sse2 iterators
+    typename std::vector<T,boost::alignment::aligned_allocator<T> >::iterator
+	scalarbegin() { return m_vec.begin(); }
+    typename std::vector<T,boost::alignment::aligned_allocator<T> >::iterator
+	scalarend() { return m_vec.end(); }
+    typename std::vector<T,boost::alignment::aligned_allocator<T> >::const_iterator
+	cscalarbegin() { return m_vec.cbegin(); }
+    typename std::vector<T,boost::alignment::aligned_allocator<T> >::const_iterator
+    cscalarend() { return m_vec.cend(); }
 
     //This is an unsafe get, be carefull about what
     //does the last index return if size was not a multiple
@@ -214,6 +268,12 @@ protected:
 
 template<typename T>
 PackType<T> Sse2Iter<T>::operator*() const
+{
+     return m_vec->get(m_idx);
+}
+
+template<typename T>
+PackType<T> Sse2IterConst<T>::operator*() const
 {
      return m_vec->get(m_idx);
 }
