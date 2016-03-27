@@ -5,12 +5,7 @@
  *      Author: gnthibault
  */
 
-#include <omp.h>
 #include <iostream>
-//#include <stdio.h>
-//#include <iomanip>      // std::setprecision
-//#include <algorithm>
-//#include <functional>
 #include <vector>
 #include <numeric>
 #include <chrono>
@@ -23,33 +18,18 @@
 #define KERY 1
 #define NRUN 10
 
-//Exemple de commandes de profiling
-// g++ ./main.cpp -g -o test && valgrind --tool=cachegrind --cachegrind-out-file=out ./test
-// cg_annotate out /Chemin/Absolu/main.cpp
+// Example of how to profile a code using either cachegrind or callgrind utility
+// g++ ./main.cpp -std=c++11 -g -o test && valgrind --tool=cachegrind --cachegrind-out-file=out ./test
+// cg_annotate out /Absolute/path/main.cpp
 
-//ou
+// or
 // g++ ./main.cpp -g -o test && valgrind --tool=callgrind ./test
 
 
-//perf top
-
+// Live monitoring of cpu usage, with advanced analysis tools: perf top
 //perf record ./test
 //perf report
 
-/*template <typename T, int vectorSize, int lkernelSize, int rkernelSize>
-struct KernelSize
-{
-	//Left Shift in bytes
-	static int lShift;
-	//Right Shift in bytes
-	static int rShift;
-};
-
-template <typename T, int vectorSize, int lkernelSize, int rkernelSize>
-double KernelSize<T,vectorSize,kernelSize>::lShift = (vectorSize-(lkernelSize%vectorSize))*sizeof(T)*8;
-
-template <typename T, int vectorSize, int lkernelSize, int rkernelSize>
-double KernelSize<T,vectorSize,kernelSize>::rShift = (vectorSize-(rkernelSize%vectorSize))*sizeof(T)*8;*/
 
 bool PerformWorkSequentially( const std::vector<float>& vec, std::vector<float>& out )
 {
@@ -180,5 +160,5 @@ int main()
 		std::cout << std::endl;
 	}*/
 
-	return 0;
+	return EXIT_SUCCESS;
 }

@@ -58,21 +58,71 @@ __m128 shiftAdd(__m128 left, __m128 right)
 	return _mm_add_ps( result0, result1 );
 }*/
 
-template<typename T, int VEC_SIZE>
-void generateNewVec(T* newVec, T* prefetch, int VecLeftIdx, int leftShift)
+template<typename T, int VEC_SIZE, int PREFETCH_BEGIN_IDX, int SUPPORT_IDX>
+class ConvolutionShifter
 {
-	//handle left vector
-	for(int i=0; i<VEC_SIZE-leftShift; i++)
+public:
+	static void generateNewVec(T* newVec, T* prefetch)
 	{
-		newVec[i] = prefetch[VEC_SIZE*VecLeftIdx+leftShift+i];
-	}
+		//handle left vector
+		for(int i=0; i<VEC_SIZE-LeftShift; i++)
+		{
+			newVec[i] = prefetch[VEC_SIZE*VecLeftIdx+LeftShift+i];
+		}
 
-	//handle right vector
-	for(int i=0; i<leftShift; i++)
-	{
-		newVec[VEC_SIZE-leftShift+i] = prefetch[VEC_SIZE*(VecLeftIdx+1)+i];
+		//handle right vector
+		for(int i=0; i<LeftShift; i++)
+		{
+			newVec[VEC_SIZE-LeftShift+i] = prefetch[VEC_SIZE*(VecLeftIdx+1)+i];
+		}
 	}
-}
+private:
+	static const int VecLeftIdx = (PREFETCH_BEGIN_IDX+SUPPORT_IDX)/VEC_SIZE;
+	static const int LeftShift = (PREFETCH_BEGIN_IDX+SUPPORT_IDX)%VEC_SIZE;
+};
+
+template<typename T, class FILT, int PREFETCH_BEGIN_IDX, int SUPPORT_IDX>
+class ConvolutionAccumulator
+{
+public:
+	static void Accumulate(T* newVec, T* prefetch, T* accumulator) //accumulator is uninitialized
+	{
+		//Recursive call over all previous index of filter support
+		ConvolutionAccumulator<T,FILT,PREFETCH_BEGIN_IDX,SUPPORT_IDX-1>::Accumulate(
+				newVec,prefetch,accumulator );
+
+		//Craft newvec from two vectors
+		ConvolutionShifter<T,FILT::VecSize,SUPPORT_IDX,PREFETCH_BEGIN_IDX>::generateNewVec(
+				newVec,prefetch);
+
+		//TODODO
+		//the k^th element of the support for each element of the vector
+		for(int k=0; k<FILT::VecSize; k++)
+		{
+			accumulator[k] += FILT::Buf[SUPPORT_IDX]*newVec[k];
+		}
+	}
+};
+
+//Partial template specialization for iteration 0 of the loop
+template<typename T, class FILT, int PREFETCH_BEGIN_IDX>
+class ConvolutionAccumulator<T,FILT,PREFETCH_BEGIN_IDX,0>
+{
+public:
+	static void Accumulate(T* newVec, T* prefetch, T* accumulator) //accumulator is uninitialized
+	{
+		//generate new vector if firstindex to process was not aligned, PrefetchBeginIdx is not null
+		ConvolutionShifter<T,FILT::VecSize,0,PREFETCH_BEGIN_IDX>::generateNewVec(
+					newVec,prefetch);
+
+		//TODODO
+		//First call: we must initialize the accumulator
+		for(int k=0; k<FILT::VecSize; k++)
+		{
+			accumulator[k] = FILT::Buf[0]*newVec[k];
+		}
+	}
+};
 
 template<class FILT, typename T>
 class Convolution
@@ -81,7 +131,7 @@ public:
 	Convolution()=default;
 	void Test( const std::vector<T>& input, std::vector<T>& output )
 	{
-		//How many vectors can be easiliy right processed without trouble loading bounds
+		//How many vectors can be easily right processed without trouble loading bounds
 		const int RightProcessableVectPerLine =
 			((input.size()/FILT::VecSize)*FILT::VecSize //"vector loadable" scalar size (minus the modulo)
 			-FILT::TapSizeRight)/FILT::VecSize;	 //right processable area (outside we cannot load the right tap)
@@ -106,39 +156,13 @@ public:
 			//Load next prefetch buffer, in the last vector
 			std::copy(in+i,in+i+FILT::VecSize,prefetch+(PrefetchCardinality-1)*FILT::VecSize);
 
-			//the first index inside the prefetch buffer
-			int prefIdx = PrefetchBeginIdx;
-
 			//Accumulator for the filtering result, initialization comes with first step
 			T accumulator[FILT::VecSize];
 			//new vector to be crafter by shiftin non overlapping vectors
 			T newVec[FILT::VecSize];
-			//generate new vector if firstindex to process was not aligned, PrefetchBeginIdx is not null
-			generateNewVec<T,FILT::VecSize>(newVec,prefetch,0,PrefetchBeginIdx);
-			//perform stage 0 of dot product vectorized			
-			for(int k=0; k<FILT::VecSize; k++)
-			{
-				accumulator[k] = FILT::Buf[0]*newVec[k];
-			}
 
-
-			//For each following index of the support, load the corresponding vector
-			for(int k = 1; k < FILT::TapSize; k++)
-			{
-				int VecLeftIdx = (prefIdx+k)/FILT::VecSize;
-				//int VecRightIdx = (prefIdx+k+FILT::VecSize-1)/FILT::VecSize;
-				int leftShift = (prefIdx+k)%FILT::VecSize;
-				//int rightShift = FILT::VecSize-leftShift;
-
-				//Craft newvec from two vectors
-				generateNewVec<T,FILT::VecSize>(newVec,prefetch,VecLeftIdx,leftShift);
-				
-				//the k^th element of the support for each element of the vector
-				for(int l=0; l<FILT::VecSize; l++)
-				{
-					accumulator[l] += FILT::Buf[k]*newVec[l];
-				}
-			}
+			ConvolutionAccumulator<T,FILT,PrefetchBeginIdx,FILT::TapSize>::Accumulate(
+					newVec, prefetch, accumulator);
 
 			//Write the result in the output
 			std::copy(accumulator,accumulator+FILT::VecSize,output.begin()+i);
