@@ -6,7 +6,7 @@
 #include <algorithm>
 
 //Local
-#include "vectorization.h"
+#include "../vectorization.h"
 
 //C++11 strongly typed enum
 enum class Vectorization {SSE,AVX};
@@ -29,15 +29,15 @@ public:
 	//Typedef vector type
 	typedef PackType<T> VectorType;
 	//Total size of the filter, in number of elements
-	static const int TapSize =
+	constexpr static int TapSize =
 		TAP_SIZE_LEFT + TAP_SIZE_RIGHT + 1; //+1 = the center pixel
 	//redefine template parameters
-	static const int VecSize = sizeof(VectorType)/sizeof(T);
+	constexpr static int VecSize = sizeof(VectorType)/sizeof(T);
 	//How many vector are needed to load a single filter support
-	static const int NbVecPerFilt =
+	constexpr static int NbVecPerFilt =
 		(TapSize+VecSize-1)/(VecSize);
-	static const int TapSizeLeft = TAP_SIZE_LEFT;
-	static const int TapSizeRight = TAP_SIZE_RIGHT;
+	constexpr static int TapSizeLeft = TAP_SIZE_LEFT;
+	constexpr static int TapSizeRight = TAP_SIZE_RIGHT;
 };
 
 /*
@@ -73,31 +73,32 @@ public:
 		PackType<T> right	= VectorizedMemOp<T,PackType<T> >::load( prefetch+VecRightIdx );
 
 		//Perform shift on both operand
-		PackType<T> l = VectorizedShift<T,PackType<T>,LeftShift>::LeftShift(left);
-		PackType<T> r = VectorizedShift<T,PackType<T>,RightShift>::RightShift(right);
+		PackType<T> l = VectorizedShift<T,PackType<T>,LeftShiftBytes>::LeftShift(left);
+		PackType<T> r = VectorizedShift<T,PackType<T>,RightShiftBytes>::RightShift(right);
 
 		//Return the generated vector
 		return l+r;
 	}
 private:
-	static const int VecSize = sizeof(PackType<T>)/sizeof(T);
-	static const int VecLeftIdx = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)/VecSize)*VecSize;
-	static const int VecRightIdx = VecLeftIdx+VecSize;
-	static const int LeftShift = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)%VecSize)*VecSize;
-	static const int RightShift = VecSize-LeftShift;
+	constexpr static int VecSize = sizeof(PackType<T>)/sizeof(T);
+	constexpr static int VecLeftIdx = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)/VecSize)*VecSize;
+	constexpr static int VecRightIdx = VecLeftIdx+VecSize;
+	constexpr static int LeftShift = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)%VecSize);
+	constexpr static int LeftShiftBytes = LeftShift*sizeof(T);
+	constexpr static int RightShiftBytes = (VecSize-LeftShift)*sizeof(T);
 };
 
 template<typename T, class FILT, int PREFETCH_BEGIN_IDX, int SUPPORT_IDX>
 class ConvolutionAccumulator
 {
 public:
-	static FILT::VectorType Accumulate(T* prefetch)
+	static typename FILT::VectorType Accumulate(T* prefetch)
 	{
 		//Recursive call over all previous index of filter support
-		FILT::VectorType accumulator = ConvolutionAccumulator<T,FILT,PREFETCH_BEGIN_IDX,SUPPORT_IDX-1>::Accumulate( prefetch );
+		typename FILT::VectorType accumulator = ConvolutionAccumulator<T,FILT,PREFETCH_BEGIN_IDX,SUPPORT_IDX-1>::Accumulate( prefetch );
 
 		//Craft newVec from two vectors
-		FILT::VectorType newVec = ConvolutionShifter<T,FILT::VecSize,SUPPORT_IDX,PREFETCH_BEGIN_IDX>::generateNewVec( prefetch );
+		typename FILT::VectorType newVec = ConvolutionShifter<T,PREFETCH_BEGIN_IDX,SUPPORT_IDX>::generateNewVec( prefetch );
 
 		//Accumulate
 		return accumulator + FILT::Buf[SUPPORT_IDX]*newVec;
@@ -109,22 +110,24 @@ template<typename T, class FILT, int PREFETCH_BEGIN_IDX>
 class ConvolutionAccumulator<T,FILT,PREFETCH_BEGIN_IDX,0>
 {
 public:
-	static FILT::VectorType Accumulate(T* prefetch) //accumulator is uninitialized
+	static typename FILT::VectorType Accumulate(T* prefetch) //accumulator is uninitialized
 	{
 		//generate new vector if firstindex to process was not aligned, PrefetchBeginIdx is not null
-		FILT::VectorType newVec = ConvolutionShifter<T,FILT::VecSize,0,PREFETCH_BEGIN_IDX>::generateNewVec( prefetch );
+		typename FILT::VectorType newVec = ConvolutionShifter<T,PREFETCH_BEGIN_IDX,0>::generateNewVec( prefetch );
+
+		std::cout << "Accumulating filter index "<<0<< " with value "<<FILT::Buf[0]<<std::endl;
 
 		//First call: we must initialize the accumulator
 		return FILT::Buf[0]*newVec;
 	}
 };
 
-template<class FILT, typename T>
+template<class FILT>
 class Convolution
 {
 public:
 	Convolution()=default;
-	void Test( const std::vector<T>& input, std::vector<T>& output )
+	static void Test( const std::vector<typename FILT::ScalarType>& input, std::vector<typename FILT::ScalarType>& output )
 	{
 		//How many vectors can be easily right processed without trouble loading bounds
 		const int RightProcessableVectPerLine =
@@ -134,57 +137,67 @@ public:
 		const int LastIndexToProcess = RightProcessableVectPerLine*FILT::VecSize;
 		
 		//Buffer containg the prefetch area to be load in vectorized registers		
-		T prefetch[PrefetchCardinality*FILT::VecSize];
+		typename FILT::ScalarType prefetch[PrefetchCardinality*FILT::VecSize];
 
 		//Raw buffer ptr
-		const T* in = input.data();
+		const typename FILT::ScalarType* in = input.data();
 
-		//1st : fill the FILT::NbVecPerFilt-1 vectors with data
-		for( int k = 0; k < (PrefetchCardinality-1)*FILT::VecSize; k+=FILT::VecSize)
-		{
-			std::copy(in+k,in+k+FILT::VecSize,prefetch+k);
-		}
+		//1st : fill the PrefetchCardinality-1 vectors with data
+		std::copy(in,in+(PrefetchCardinality-1)*FILT::VecSize,prefetch);
 
 		//Now we must perform regular loop, iterating over vectors
+		#pragma unroll
 		for( int i = FirstIndexToProcess; i<LastIndexToProcess; i+= FILT::VecSize )
 		{
 			//Load next prefetch buffer, in the last vector
-			std::copy(in+i,in+i+FILT::VecSize,prefetch+(PrefetchCardinality-1)*FILT::VecSize);
+			VectorizedMemOp<typename FILT::ScalarType,
+				PackType<typename FILT::ScalarType> >::store(
+					prefetch+(PrefetchCardinality-1)*FILT::VecSize,
+					VectorizedMemOp<typename FILT::ScalarType,
+						PackType<typename FILT::ScalarType> >::load(
+							in+i+ShiftBetweenProcessedAndLastLoaded ) );
 
-			//Accumulator for the filtering result, initialization comes with first step
-			T accumulator[FILT::VecSize];
-			//new vector to be crafter by shiftin non overlapping vectors
-			T newVec[FILT::VecSize];
-
-			ConvolutionAccumulator<T,FILT,PrefetchBeginIdx,FILT::TapSize>::Accumulate(
-					newVec, prefetch, accumulator);
-
-			//Write the result in the output
-			std::copy(accumulator,accumulator+FILT::VecSize,output.begin()+i);
+			//Store the result of the convolution
+			VectorizedMemOp<typename FILT::ScalarType,
+				PackType<typename FILT::ScalarType> >::store(
+					output.data()+i,
+					ConvolutionAccumulator<typename FILT::ScalarType,
+						FILT,PrefetchBeginIdx,FILT::TapSize-1>::Accumulate(prefetch)
+			);
 
 			//last : left shift buffer to be updated
-			for( int k = 0; k < (PrefetchCardinality-1)*FILT::VecSize; k+=FILT::VecSize)
-			{
-				std::copy(prefetch+k+FILT::VecSize,
-					prefetch+k+2*FILT::VecSize,
-					prefetch+k);
-			}
+			//destination iterator is BEFORE source iterator, use of std::copy is ok
+			std::copy( prefetch+FILT::VecSize,
+					prefetch+PrefetchCardinality*FILT::VecSize,
+					prefetch);
 		}
 	}
 
 protected:
 	//To output 1 processed vector, how many vector should we load
 	static const int PrefetchCardinality =
-		(FILT::TapSizeLeft+
-		FILT::VecSize+
-		FILT::TapSizeRight+
-		FILT::VecSize-1)/(FILT::VecSize);
-	static const int FirstIndexToProcess =//Vector aligned scalar index to begin with
+		// left tap size part
+		((FILT::TapSizeLeft+FILT::VecSize-1)/FILT::VecSize+
+		// central area to be processed
+		1+
+		// right tap part
+		(FILT::TapSizeRight+FILT::VecSize-1)/FILT::VecSize);
+	//Vector aligned scalar index from output vector to begin with
+	static const int FirstIndexToProcess =
 		((FILT::TapSizeLeft+
 		FILT::VecSize-1)/FILT::VecSize)	//Min number of vector to load left tap
-		*FILT::VecSize;		//*FILT::VecSize to get a scalar index
+		*FILT::VecSize;		//multiplied by FILT::VecSize to get a scalar index
+	//non aligned scalar index from prefetch to begin with
 	static const int PrefetchBeginIdx =
-		FirstIndexToProcess%FILT::TapSizeLeft;
+		FILT::VecSize-(FILT::TapSizeLeft%FILT::VecSize);
+	/*
+	 * non aligned scalar index difference between first processed index
+	 * and index of last prefetch to be loaded, actually equal to the number
+	 * of vector covering the vecSize+TapSizeRight area minus 1 vector
+	 */
+	static const int ShiftBetweenProcessedAndLastLoaded =
+		((( 2*FILT::VecSize + FILT::TapSizeRight + 1)/
+				FILT::VecSize)-1)*FILT::VecSize;
 };		
 
 
@@ -193,8 +206,7 @@ int main(int argc, char* argv[])
 	std::vector<float> input(40,1);
 	std::vector<float> output(40,0);
 
-	Convolution< MeanFilter<float,4,1,1>, float > conv;
-	conv.Test( input, output );
+	Convolution< MeanFilter<float,1,1> >::Test( input, output );
 
 	std::for_each(output.cbegin(),output.cend(),
 		[](float in){std::cout << "val= "<< in << std::endl;});

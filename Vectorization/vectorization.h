@@ -28,8 +28,22 @@ template<typename T, class VecT>
 class VectorizedMemOp
 {
 public:
-	static VecT load( T* ptr );
+	static VecT load( const T* ptr );
 	static void store();
+};
+
+template<>
+class VectorizedMemOp<float,__m128>
+{
+public:
+	static __m128 load( const float* ptr )
+	{
+		return _mm_load_ps( ptr );
+	}
+	static void store( float* ptr, __m128 value)
+	{
+		_mm_store_ps( ptr, value );
+	}
 };
 
 //Store a 128bits sse2 vector of float into buffer
@@ -127,7 +141,7 @@ __m128 shiftAdd(__m128 left, __m128 right)
 }
 
 //Perform left and right shift
-template<typename T, class VecT, int SHIFT>
+template<typename T, class VecT, unsigned char SHIFT>
 class VectorizedShift
 {
 public:
@@ -143,7 +157,7 @@ public:
 	}
 };
 
-template<int SHIFT>
+template<unsigned char SHIFT>
 class VectorizedShift<float,__m128,SHIFT>
 {
 public:
