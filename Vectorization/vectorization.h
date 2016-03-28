@@ -23,6 +23,15 @@
 #include "xmmintrin.h"
 #include "emmintrin.h"
 
+//Too dangerous to define default implementation
+template<typename T, class VecT>
+class VectorizedMemOp
+{
+public:
+	static VecT load( T* ptr );
+	static void store();
+};
+
 //Store a 128bits sse2 vector of float into buffer
 void store(float* ptr, __m128 value)
 {
@@ -116,6 +125,37 @@ __m128 shiftAdd(__m128 left, __m128 right)
 	__m128 result1 = (__m128)_mm_srli_si128( (__m128i)right, RS );
 	return _mm_add_ps( result0, result1 );
 }
+
+//Perform left and right shift
+template<typename T, class VecT, int SHIFT>
+class VectorizedShift
+{
+public:
+	//Defaulted implementation for scalar type: no shift
+	static VecT LeftShift( VecT input )
+	{
+		return input;
+	}
+	//Defaulted implementation for scalar type: no shift
+	static VecT RightShift( VecT input )
+	{
+		return input;
+	}
+};
+
+template<int SHIFT>
+class VectorizedShift<float,__m128,SHIFT>
+{
+public:
+	static __m128 LeftShift( __m128 input )
+	{
+		return (__m128)_mm_slli_si128( (__m128i)input, SHIFT );
+	}
+	static __m128 RightShift( __m128 input )
+	{
+		return (__m128)_mm_srli_si128( (__m128i)input, SHIFT );
+	}
+};
 
 // forward-declaration to allow use in Iter
 template<typename T> class Sse2Vec;

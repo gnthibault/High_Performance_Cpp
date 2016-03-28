@@ -5,6 +5,12 @@
 #include <functional>
 #include <algorithm>
 
+//Local
+#include "vectorization.h"
+
+//C++11 strongly typed enum
+enum class Vectorization {SSE,AVX};
+
 /*
  * TAP_SIZE_LEFT does only account for number of elements at left,
  * without the current one.
@@ -12,95 +18,89 @@
  * without the current one.
  * Convolution for VEC_SIZE elements will be computed
  */
-
-
-template<typename T, int VEC_SIZE, int TAP_SIZE_LEFT, int TAP_SIZE_RIGHT>
+template<typename T, int TAP_SIZE_LEFT, int TAP_SIZE_RIGHT>
 class Filter
 {
 public:
 	Filter()=default;
 public:
+	//Typedef main type
+	typedef T ScalarType;
+	//Typedef vector type
+	typedef PackType<T> VectorType;
 	//Total size of the filter, in number of elements
 	static const int TapSize =
 		TAP_SIZE_LEFT + TAP_SIZE_RIGHT + 1; //+1 = the center pixel
+	//redefine template parameters
+	static const int VecSize = sizeof(VectorType)/sizeof(T);
 	//How many vector are needed to load a single filter support
 	static const int NbVecPerFilt =
-		(TapSize+VEC_SIZE-1)/(VEC_SIZE);
-	//redefine template parameters
-	static const int VecSize = VEC_SIZE;
+		(TapSize+VecSize-1)/(VecSize);
 	static const int TapSizeLeft = TAP_SIZE_LEFT;
 	static const int TapSizeRight = TAP_SIZE_RIGHT;
 };
 
-template<typename T, int VEC_SIZE, int TAP_SIZE_LEFT, int TAP_SIZE_RIGHT>
-class MeanFilter : public Filter<T,VEC_SIZE,TAP_SIZE_LEFT,TAP_SIZE_RIGHT>
+/*
+ * We define an inheritance of the fully generic filter for the "mean filter"
+ */
+template<typename T, int TAP_SIZE_LEFT, int TAP_SIZE_RIGHT>
+class MeanFilter : public Filter<T,TAP_SIZE_LEFT,TAP_SIZE_RIGHT>
 {
 public:
 	MeanFilter()=default;
 public:
-	static const T Buf[Filter<T,VEC_SIZE,TAP_SIZE_LEFT,TAP_SIZE_RIGHT>::TapSize];
+	static const T Buf[Filter<T,TAP_SIZE_LEFT,TAP_SIZE_RIGHT>::TapSize];
 };
 
 /*
- * Compile time declaration of the simple filter. It is very important
- * to notice that, if filter has its size not a multiple of vec size,
- * It should be padded at the end with zeros
+ * Compile time declaration of the simple filter using full specialization
  */
-template<> const float MeanFilter<float,4,1,1>::Buf[3] = {0.33333f,0.33333f,0.33333f};
+template<> const float MeanFilter<float,1,1>::Buf[3] = {0.33333f,0.33333f,0.33333f};
 
-/*template<int LS, int RS>
-__m128 shiftAdd(__m128 left, __m128 right)
-{
-	//Left shift
-	__m128 result0 = (__m128)_mm_slli_si128( (__m128i)left, LS );
-	//Right shift
-	__m128 result1 = (__m128)_mm_srli_si128( (__m128i)right, RS );
-	return _mm_add_ps( result0, result1 );
-}*/
-
-template<typename T, int VEC_SIZE, int PREFETCH_BEGIN_IDX, int SUPPORT_IDX>
+/*
+ * From the prefetch buffer in input, generates a vector that contains
+ * the "SUPPORT_IDX" th element of each element of the current "output" vector
+ * of the algorithm.
+ */
+template<typename T, int PREFETCH_BEGIN_IDX, int SUPPORT_IDX>
 class ConvolutionShifter
 {
 public:
-	static void generateNewVec(T* newVec, T* prefetch)
+	static PackType<T> generateNewVec(T* prefetch)
 	{
-		//handle left vector
-		for(int i=0; i<VEC_SIZE-LeftShift; i++)
-		{
-			newVec[i] = prefetch[VEC_SIZE*VecLeftIdx+LeftShift+i];
-		}
+		//Fetch left part and right part, to be mixed after
+		PackType<T> left	= VectorizedMemOp<T,PackType<T> >::load( prefetch+VecLeftIdx );
+		PackType<T> right	= VectorizedMemOp<T,PackType<T> >::load( prefetch+VecRightIdx );
 
-		//handle right vector
-		for(int i=0; i<LeftShift; i++)
-		{
-			newVec[VEC_SIZE-LeftShift+i] = prefetch[VEC_SIZE*(VecLeftIdx+1)+i];
-		}
+		//Perform shift on both operand
+		PackType<T> l = VectorizedShift<T,PackType<T>,LeftShift>::LeftShift(left);
+		PackType<T> r = VectorizedShift<T,PackType<T>,RightShift>::RightShift(right);
+
+		//Return the generated vector
+		return l+r;
 	}
 private:
-	static const int VecLeftIdx = (PREFETCH_BEGIN_IDX+SUPPORT_IDX)/VEC_SIZE;
-	static const int LeftShift = (PREFETCH_BEGIN_IDX+SUPPORT_IDX)%VEC_SIZE;
+	static const int VecSize = sizeof(PackType<T>)/sizeof(T);
+	static const int VecLeftIdx = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)/VecSize)*VecSize;
+	static const int VecRightIdx = VecLeftIdx+VecSize;
+	static const int LeftShift = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)%VecSize)*VecSize;
+	static const int RightShift = VecSize-LeftShift;
 };
 
 template<typename T, class FILT, int PREFETCH_BEGIN_IDX, int SUPPORT_IDX>
 class ConvolutionAccumulator
 {
 public:
-	static void Accumulate(T* newVec, T* prefetch, T* accumulator) //accumulator is uninitialized
+	static FILT::VectorType Accumulate(T* prefetch)
 	{
 		//Recursive call over all previous index of filter support
-		ConvolutionAccumulator<T,FILT,PREFETCH_BEGIN_IDX,SUPPORT_IDX-1>::Accumulate(
-				newVec,prefetch,accumulator );
+		FILT::VectorType accumulator = ConvolutionAccumulator<T,FILT,PREFETCH_BEGIN_IDX,SUPPORT_IDX-1>::Accumulate( prefetch );
 
-		//Craft newvec from two vectors
-		ConvolutionShifter<T,FILT::VecSize,SUPPORT_IDX,PREFETCH_BEGIN_IDX>::generateNewVec(
-				newVec,prefetch);
+		//Craft newVec from two vectors
+		FILT::VectorType newVec = ConvolutionShifter<T,FILT::VecSize,SUPPORT_IDX,PREFETCH_BEGIN_IDX>::generateNewVec( prefetch );
 
-		//TODODO
-		//the k^th element of the support for each element of the vector
-		for(int k=0; k<FILT::VecSize; k++)
-		{
-			accumulator[k] += FILT::Buf[SUPPORT_IDX]*newVec[k];
-		}
+		//Accumulate
+		return accumulator + FILT::Buf[SUPPORT_IDX]*newVec;
 	}
 };
 
@@ -109,18 +109,13 @@ template<typename T, class FILT, int PREFETCH_BEGIN_IDX>
 class ConvolutionAccumulator<T,FILT,PREFETCH_BEGIN_IDX,0>
 {
 public:
-	static void Accumulate(T* newVec, T* prefetch, T* accumulator) //accumulator is uninitialized
+	static FILT::VectorType Accumulate(T* prefetch) //accumulator is uninitialized
 	{
 		//generate new vector if firstindex to process was not aligned, PrefetchBeginIdx is not null
-		ConvolutionShifter<T,FILT::VecSize,0,PREFETCH_BEGIN_IDX>::generateNewVec(
-					newVec,prefetch);
+		FILT::VectorType newVec = ConvolutionShifter<T,FILT::VecSize,0,PREFETCH_BEGIN_IDX>::generateNewVec( prefetch );
 
-		//TODODO
 		//First call: we must initialize the accumulator
-		for(int k=0; k<FILT::VecSize; k++)
-		{
-			accumulator[k] = FILT::Buf[0]*newVec[k];
-		}
+		return FILT::Buf[0]*newVec;
 	}
 };
 
