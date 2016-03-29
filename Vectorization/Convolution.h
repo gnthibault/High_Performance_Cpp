@@ -1,5 +1,4 @@
 //STL
-#include <vector>
 #include <cstdlib>
 #include <iostream>
 #include <functional>
@@ -62,6 +61,7 @@ template<> const float MeanFilter<float,1,1>::Buf[3] = {0.33333f,0.33333f,0.3333
  * the "SUPPORT_IDX" th element of each element of the current "output" vector
  * of the algorithm.
  */
+//TODO see __m256 _mm256_blendv_ps (__m256 a, __m256 b, __m256 mask) for AVX instruction
 template<typename T, int PREFETCH_BEGIN_IDX, int SUPPORT_IDX>
 class ConvolutionShifter
 {
@@ -130,38 +130,33 @@ class Convolution
 {
 public:
 	Convolution()=default;
-	static void Test( const std::vector<typename FILT::ScalarType>& input, std::vector<typename FILT::ScalarType>& output )
+	static void Convolve( const typename FILT::ScalarType* in, typename FILT::ScalarType* out, const int lineSize )
 	{
 		//How many vectors can be easily right processed without trouble loading bounds
 		const int RightProcessableVectPerLine =
-			((input.size()/FILT::VecSize)*FILT::VecSize //"vector loadable" scalar size (minus the modulo)
+			((lineSize/FILT::VecSize)*FILT::VecSize //"vector loadable" scalar size (minus the modulo)
 			-FILT::TapSizeRight)/FILT::VecSize;	 //right processable area (outside we cannot load the right tap)
 		//Vector aligned scalar index to end with (excluded)		
 		const int LastIndexToProcess = RightProcessableVectPerLine*FILT::VecSize;
-		
-		//Raw buffer ptr
-		const typename FILT::ScalarType* in = input.data();
 
 		if( FirstIndexToProcess >= LastIndexToProcess )
 		{
 			//The naive implementation for small sizes
-			const size_t inputSize = input.size();
-			for(int i = 0; i<inputSize;i++)
+			for(int i = 0; i<lineSize;i++)
 			{
 				for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
 				{
-					output[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * input[positive_modulo(k,inputSize)];
+					out[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * in[positive_modulo(k,lineSize)];
 				}
 			}
 		}else //The vectorized implementation
 		{
 			//////// handle prefix bound : non vectorized implementation
-			const size_t inputSize = input.size();
 			for(int i = 0; i<FirstIndexToProcess;i++)
 			{
 				for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
 				{
-					output[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * input[positive_modulo(k,inputSize)];
+					out[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * in[positive_modulo(k,lineSize)];
 				}
 			}
 
@@ -188,7 +183,7 @@ public:
 				//Store the result of the convolution
 				VectorizedMemOp<typename FILT::ScalarType,
 					PackType<typename FILT::ScalarType> >::store(
-						output.data()+i,
+						out+i,
 						ConvolutionAccumulator<typename FILT::ScalarType,
 							FILT,PrefetchBeginIdx,FILT::TapSize-1>::Accumulate(prefetch)
 				);
@@ -201,18 +196,18 @@ public:
 			}
 
 			//////// handle suffix bound : non vectorized implementation
-			for(int i = LastIndexToProcess; i<inputSize; i++)
+			for(int i = LastIndexToProcess; i<lineSize; i++)
 			{
 				for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
 				{
-					output[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * input[positive_modulo(k,inputSize)];
+					out[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * in[positive_modulo(k,lineSize)];
 				}
 			}
 		}
 	}
 
 protected:
-	//To output 1 processed vector, how many vector should we load
+	//To out 1 processed vector, how many vector should we load
 	static const int PrefetchCardinality =
 		// left tap size part
 		((FILT::TapSizeLeft+FILT::VecSize-1)/FILT::VecSize+
@@ -238,13 +233,13 @@ protected:
 				FILT::VecSize)-1)*FILT::VecSize;
 };		
 
-
+//build with g++ ./test.cpp -std=c++11 -O3 -o test -DUSE_SSE
 int main(int argc, char* argv[])
 {
 	std::vector<float> input(4,1);
 	std::vector<float> output(input.size(),0);
 
-	Convolution< MeanFilter<float,1,1> >::Test( input, output );
+	Convolution< MeanFilter<float,1,1> >::Convolve( input.data(), output.data(), input.size() );
 
 	std::for_each(output.cbegin(),output.cend(),
 		[](float in){std::cout << "val= "<< in << std::endl;});

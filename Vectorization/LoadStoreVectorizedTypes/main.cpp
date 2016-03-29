@@ -17,7 +17,9 @@
 #include <boost/align/aligned_allocator.hpp>
 
 //Local
+#define USE_SSE
 #include "../vectorization.h"
+#include "SimdVec.h"
 
 #define NRUN 100
 

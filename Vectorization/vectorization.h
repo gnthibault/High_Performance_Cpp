@@ -20,125 +20,112 @@
  * Documentation for the various intrinsics can be found on
  * https://software.intel.com/sites/landingpage/IntrinsicsGuide/
  */
-#include "xmmintrin.h"
-#include "emmintrin.h"
+#ifdef USE_SSE
+	#include "xmmintrin.h"
+	#include "emmintrin.h"
+#elif defined USE_AVX
+	#include "immintrin.h"
+#elif defined USE_NEON
+	#include <arm_neon.h>
+#endif
 
 //Too dangerous to define default implementation
 template<typename T, class VecT>
 class VectorizedMemOp
 {
 public:
-	static VecT load( const T* ptr );
-	static void store();
-};
-
-template<>
-class VectorizedMemOp<float,__m128>
-{
-public:
-	static __m128 load( const float* ptr )
+	static VecT load( const T* ptr )
 	{
-		return _mm_load_ps( ptr );
+		return *ptr;
 	}
-	static void store( float* ptr, __m128 value)
+	static void store( float* ptr, VecT value)
 	{
-		_mm_store_ps( ptr, value );
+		*ptr = value;
 	}
 };
 
-//Store a 128bits sse2 vector of float into buffer
-void store(float* ptr, __m128 value)
-{
-	_mm_store_ps( ptr, value );
-}
+#ifdef USE_SSE
+	template<>
+	class VectorizedMemOp<float,__m128>
+	{
+	public:
+		static __m128 load( const float* ptr )
+		{
+			return _mm_load_ps( ptr );
+		}
+		static void store( float* ptr, __m128 value)
+		{
+			_mm_store_ps( ptr, value );
+		}
+	};
+#elif defined USE_AVX
+	template<>
+	class VectorizedMemOp<float,__m256>
+	{
+	public:
+		static __m256 load( const float* ptr )
+		{
+			return _mm256_load_ps( ptr );
+		}
+		static void store( float* ptr, __m256 value)
+		{
+			_mm256_store_ps( ptr, value );
+		}
+	};
+#elif defined USE_NEON
+	template<>
+	class VectorizedMemOp<float,float32x4_t>
+	{
+	public:
+		static float32x4_t load( const float* ptr )
+		{
+			return vld1q_f32( ptr );
+		}
+		static void store( float* ptr, float32x4_t value)
+		{
+			vst1q_f32( ptr, value );
+		}
+	};
+#endif
 
-//Store a 128bits sse2 vector of int into buffer
-void store(int* ptr, __m128i value)
-{
-	_mm_store_si128 ((__m128i*) ptr, value );
-}
-
-//Load a 128bits sse2 vector of float from a buffer
-__m128 load(const float* ptr)
-{
-	return _mm_load_ps( ptr );
-}
-
-//Load a 128bits sse2 vector of int from a buffer
-__m128i load(const int* ptr)
-{
-	return _mm_load_si128((__m128i*)(ptr));
-}
-
-/*
- * Sum all 4 float elements of a 128 bits vector into 1 value
- * To do so, we use a butterfly like summation pattern
- */
-float sumFloat(__m128 value)
-{
+#ifdef USE_SSE
 	/*
-	 * Shuffle the input vector such that we have 1,0,3,2
-	 * This is equivalent to a pairwise swap where the first
-	 * two elements are swapped with the next two
+	 * No generic implementation for this function for now
+	 * Used in the dot product example
+	 * Sum all 4 float elements of a 128 bits vector into 1 value
+	 * To do so, we use a butterfly like summation pattern
 	 */
-	__m128 shufl = _mm_shuffle_ps(value,value, _MM_SHUFFLE(1,0,3,2));
+	float sumFloat(__m128 value)
+	{
+		/*
+		 * Shuffle the input vector such that we have 1,0,3,2
+		 * This is equivalent to a pairwise swap where the first
+		 * two elements are swapped with the next two
+		 */
+		__m128 shufl = _mm_shuffle_ps(value,value, _MM_SHUFFLE(1,0,3,2));
 
-	//Sum both values
-	shufl = _mm_add_ps(value, shufl);
-	//shufl = |3|2|1|0| + |1|0|3|2| = |3+1|2+0|1+3|0+2|
+		//Sum both values
+		shufl = _mm_add_ps(value, shufl);
+		//shufl = |3|2|1|0| + |1|0|3|2| = |3+1|2+0|1+3|0+2|
 
-	/*
-	 * Second shuffle 2,3,0,1
-	 * This is equivalent to 1 by 1 swap between every
-	 * two neighboring elements from the first swap
-	 */
-	__m128 shufl2 = _mm_shuffle_ps(shufl,shufl, _MM_SHUFFLE(2,3,0,1));
-	//shufl2 = |2+0|3+1|0+2|1+3|
+		/*
+		 * Second shuffle 2,3,0,1
+		 * This is equivalent to 1 by 1 swap between every
+		 * two neighboring elements from the first swap
+		 */
+		__m128 shufl2 = _mm_shuffle_ps(shufl,shufl, _MM_SHUFFLE(2,3,0,1));
+		//shufl2 = |2+0|3+1|0+2|1+3|
 
 
-	//Sum both values
-	shufl = _mm_add_ps(shufl, shufl2);
-	//shufl = |3+1|2+0|1+3|0+2| + |2+0|3+1|0+2|1+3|
+		//Sum both values
+		shufl = _mm_add_ps(shufl, shufl2);
+		//shufl = |3+1|2+0|1+3|0+2| + |2+0|3+1|0+2|1+3|
 
-	//Extract the right value
-	return _mm_cvtss_f32 (shufl);
-	//return _mm_extract_ps (shufl a, 0);
-}
-
-/*
- * Simple example of intrinsic for multiplication,
- * probably useless by the way because operator *
- * should be translated by this intrinsic by compiler
- */
-__m128 mulFloat(__m128 value0, __m128 value1)
-{
-	return _mm_mul_ps( value0, value1 );
-}
-
-/*
- * Simple example of intrinsic for addition,
- * probably useless by the way because operator +
- * should be translated by this intrinsic by compiler
- */
-__m128 addFloat(__m128 value0, __m128 value1)
-{
-	return _mm_add_ps( value0, value1 );
-}
-
-/*
- * Shift left operand by LS bytes towards left,
- * then shift right operand by RS bytes towards right
- * then return the sum of the two
- */
-template<int LS, int RS>
-__m128 shiftAdd(__m128 left, __m128 right)
-{
-	//Left shift
-	__m128 result0 = (__m128)_mm_slli_si128( (__m128i)left, LS );
-	//Right shift
-	__m128 result1 = (__m128)_mm_srli_si128( (__m128i)right, RS );
-	return _mm_add_ps( result0, result1 );
-}
+		//Extract the right value
+		return _mm_cvtss_f32 (shufl);
+		//return _mm_extract_ps (shufl a, 0);
+	}
+#endif
 
 //Perform left and right shift
 template<typename T, class VecT, unsigned char SHIFT>
@@ -146,196 +133,47 @@ class VectorizedShift
 {
 public:
 	//Defaulted implementation for scalar type: no shift
-	static VecT LeftShift( VecT input )
+	constexpr static VecT LeftShift( VecT input )
 	{
-		return input;
+		return SHIFT != 0 ? 0 : input;
 	}
 	//Defaulted implementation for scalar type: no shift
-	static VecT RightShift( VecT input )
+	constexpr static VecT RightShift( VecT input )
 	{
-		return input;
+		return SHIFT != 0 ? 0 : input;
 	}
 };
 
-template<unsigned char SHIFT>
-class VectorizedShift<float,__m128,SHIFT>
-{
-public:
-	static __m128 LeftShift( __m128 input )
+#ifdef USE_SSE
+	template<unsigned char SHIFT>
+	class VectorizedShift<float,__m128,SHIFT>
 	{
-		return (__m128)_mm_slli_si128( (__m128i)input, SHIFT );
-	}
-	static __m128 RightShift( __m128 input )
-	{
-		return (__m128)_mm_srli_si128( (__m128i)input, SHIFT );
-	}
-};
+	public:
+		constexpr static __m128 LeftShift( __m128 input )
+		{
+			return (__m128)_mm_slli_si128( (__m128i)input, SHIFT );
+		}
+		constexpr static __m128 RightShift( __m128 input )
+		{
+			return (__m128)_mm_srli_si128( (__m128i)input, SHIFT );
+		}
+	};
+#endif
+
 
 // forward-declaration to allow use in Iter
-template<typename T> class Sse2Vec;
+template<typename T> class SimdVec;
 
 //Specialize Packed types when they exist
 template<typename T> struct PackedType { typedef T type; };//Default packed type is... not packed
-template<> struct PackedType<float> { using type = __m128; };
-template<> struct PackedType<int> { using type = __m128i; };
+
+#ifdef USE_SSE
+	template<> struct PackedType<float> { using type = __m128; };
+#elif defined USE_AVX
+	template<> struct PackedType<float> { using type = __m256; };
+#elif defined USE_NEON
+	template<> struct PackedType<float> { using type = float32x4_t; };
+#endif
 template<typename T> using PackType = typename PackedType<T>::type;
-
-/*
- * An iterator must support an operator* method, an operator != method,
- * and an operator++ method
- */
-template<typename T>
-class Sse2Iter
-{
-public:
-    Sse2Iter(Sse2Vec<T>* vec, size_t idx) : m_idx( idx ), m_vec( vec ) {}
-
-    // these three methods form the basis of an iterator for use with
-    // a range-based for loop
-    bool operator!=(const Sse2Iter<T>& other) const
-    {
-        return m_idx != other.m_idx;
-    }
-
-    // this method must be defined after the definition of Sse2Vec
-    // since it needs to use it, here we decide not to return
-    // a reference, modification will have to use the set method
-    PackType<T> operator* () const;
-
-    //A simple alias for operator*
-    PackType<T> get() const { return *(*this); };
-
-    // this method must be defined after the definition of Sse2Vec
-	// since it needs to use it
-    void set( PackType<T> val );
-
-    Sse2Iter<T>& operator++() //prefix
-    {
-    	// incrementing index accounting for the multiple elements
-    	// of the packed type
-        m_idx+=(sizeof(PackType<T>)/sizeof(T));
-        // although not strictly necessary for a range-based for loop
-        // following the normal convention of returning a value from
-        // operator++ is a good idea.
-        return *this;
-    }
-
-    Sse2Iter<T> operator++(int) //suffix
-	{
-	   m_idx+=(sizeof(PackType<T>)/sizeof(T));
-	   return *this;
-	}
-
-private:
-    size_t m_idx;
-    Sse2Vec<T> *m_vec;
-};
-//The const iterator
-template<typename T>
-class Sse2IterConst
-{
-public:
-	Sse2IterConst(const Sse2Vec<T>* vec, size_t idx) : m_idx( idx ), m_vec( vec ) {}
-
-    bool operator!=(const Sse2IterConst<T>& other) const
-    {
-        return m_idx != other.m_idx;
-    }
-    PackType<T> operator* () const;
-    PackType<T> get() const { return *(*this); };
-    Sse2IterConst<T>& operator++() //prefix
-    {
-        m_idx+=(sizeof(PackType<T>)/sizeof(T));
-        return *this;
-    }
-    Sse2IterConst<T> operator++(int) //suffix
-	{
-	   m_idx+=(sizeof(PackType<T>)/sizeof(T));
-	   return *this;
-	}
-
-private:
-    size_t m_idx;
-    const Sse2Vec<T> *m_vec;
-};
-
-/*
- * An iterable object must feature a begin and a end methods that return
- * iterators to the beginning and end of the "vector"
- */
-template<typename T>
-class Sse2Vec
-{
-public:
-    Sse2Vec(size_t size, T initVal = (T)0)
-	{
-    	size_t nbElementPerVector = sizeof(PackType<T>)/sizeof(T);
-    	//Compute the minimum number of vector that should be used
-    	size_t newSize = (size+nbElementPerVector-1)/nbElementPerVector;
-        m_vec.resize( newSize*nbElementPerVector, initVal );
-	}
-
-    Sse2Iter<T> begin()
-    {
-        return Sse2Iter<T>( this, 0 );
-    }
-    Sse2IterConst<T> cbegin() const
-    {
-        return Sse2IterConst<T>( this, 0 );
-    }
-    Sse2Iter<T> end()
-    {
-        return Sse2Iter<T>( this, m_vec.size() );
-    }
-    Sse2IterConst<T> cend() const
-	{
-		return Sse2IterConst<T>( this, m_vec.size() );
-	}
-
-    //We also authorize non sse2 iterators
-    typename std::vector<T,boost::alignment::aligned_allocator<T> >::iterator
-	scalarbegin() { return m_vec.begin(); }
-    typename std::vector<T,boost::alignment::aligned_allocator<T> >::iterator
-	scalarend() { return m_vec.end(); }
-    typename std::vector<T,boost::alignment::aligned_allocator<T> >::const_iterator
-	cscalarbegin() { return m_vec.cbegin(); }
-    typename std::vector<T,boost::alignment::aligned_allocator<T> >::const_iterator
-    cscalarend() { return m_vec.cend(); }
-
-    //This is an unsafe get, be carefull about what
-    //does the last index return if size was not a multiple
-    //of vector size
-    PackType<T> get( size_t idx ) const
-    {
-         return load(m_vec.data()+idx);
-    }
-
-    //Unsafe set
-    void set( size_t idx, PackType<T> val )
-	{
-		 store( m_vec.data()+idx, val );
-	}
-
-protected:
-    std::vector<T,boost::alignment::aligned_allocator<T> > m_vec;
-};
-
-template<typename T>
-PackType<T> Sse2Iter<T>::operator*() const
-{
-     return m_vec->get(m_idx);
-}
-
-template<typename T>
-PackType<T> Sse2IterConst<T>::operator*() const
-{
-     return m_vec->get(m_idx);
-}
-
-template<typename T>
-void Sse2Iter<T>::set(PackType<T> val)
-{
-     return m_vec->set(m_idx, val);
-}
 
 #endif /* VECTORIZATION_H_ */

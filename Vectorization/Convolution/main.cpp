@@ -10,6 +10,8 @@
 #include <numeric>
 #include <chrono>
 
+//local
+#define USE_SSE
 #include "../vectorization.h"
 
 #define SIZEX 256
