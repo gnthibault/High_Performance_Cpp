@@ -115,12 +115,15 @@ public:
 		//generate new vector if firstindex to process was not aligned, PrefetchBeginIdx is not null
 		typename FILT::VectorType newVec = ConvolutionShifter<T,PREFETCH_BEGIN_IDX,0>::generateNewVec( prefetch );
 
-		std::cout << "Accumulating filter index "<<0<< " with value "<<FILT::Buf[0]<<std::endl;
-
 		//First call: we must initialize the accumulator
 		return FILT::Buf[0]*newVec;
 	}
 };
+
+inline int positive_modulo(int i, int n)
+{
+    return (i % n + n) % n;
+}
 
 template<class FILT>
 class Convolution
@@ -136,40 +139,75 @@ public:
 		//Vector aligned scalar index to end with (excluded)		
 		const int LastIndexToProcess = RightProcessableVectPerLine*FILT::VecSize;
 		
-		//Buffer containg the prefetch area to be load in vectorized registers		
-		typename FILT::ScalarType prefetch[PrefetchCardinality*FILT::VecSize];
-
 		//Raw buffer ptr
 		const typename FILT::ScalarType* in = input.data();
 
-		//1st : fill the PrefetchCardinality-1 vectors with data
-		std::copy(in,in+(PrefetchCardinality-1)*FILT::VecSize,prefetch);
-
-		//Now we must perform regular loop, iterating over vectors
-		#pragma unroll
-		for( int i = FirstIndexToProcess; i<LastIndexToProcess; i+= FILT::VecSize )
+		if( FirstIndexToProcess >= LastIndexToProcess )
 		{
-			//Load next prefetch buffer, in the last vector
-			VectorizedMemOp<typename FILT::ScalarType,
-				PackType<typename FILT::ScalarType> >::store(
-					prefetch+(PrefetchCardinality-1)*FILT::VecSize,
-					VectorizedMemOp<typename FILT::ScalarType,
-						PackType<typename FILT::ScalarType> >::load(
-							in+i+ShiftBetweenProcessedAndLastLoaded ) );
+			//The naive implementation for small sizes
+			const size_t inputSize = input.size();
+			for(int i = 0; i<inputSize;i++)
+			{
+				for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
+				{
+					output[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * input[positive_modulo(k,inputSize)];
+				}
+			}
+		}else //The vectorized implementation
+		{
+			//////// handle prefix bound : non vectorized implementation
+			const size_t inputSize = input.size();
+			for(int i = 0; i<FirstIndexToProcess;i++)
+			{
+				for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
+				{
+					output[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * input[positive_modulo(k,inputSize)];
+				}
+			}
 
-			//Store the result of the convolution
-			VectorizedMemOp<typename FILT::ScalarType,
-				PackType<typename FILT::ScalarType> >::store(
-					output.data()+i,
-					ConvolutionAccumulator<typename FILT::ScalarType,
-						FILT,PrefetchBeginIdx,FILT::TapSize-1>::Accumulate(prefetch)
-			);
+			//////// handle vectorizable part
 
-			//last : left shift buffer to be updated
-			//destination iterator is BEFORE source iterator, use of std::copy is ok
-			std::copy( prefetch+FILT::VecSize,
-					prefetch+PrefetchCardinality*FILT::VecSize,
-					prefetch);
+			//Buffer containg the prefetch area to be load in vectorized registers
+			typename FILT::ScalarType prefetch[PrefetchCardinality*FILT::VecSize];
+
+			//1st : fill the PrefetchCardinality-1 vectors with data
+			std::copy(in,in+(PrefetchCardinality-1)*FILT::VecSize,prefetch);
+
+			//Now we must perform regular loop, iterating over vectors
+			#pragma unroll
+			for( int i = FirstIndexToProcess; i<LastIndexToProcess; i+= FILT::VecSize )
+			{
+				//Load next prefetch buffer, in the last vector
+				VectorizedMemOp<typename FILT::ScalarType,
+					PackType<typename FILT::ScalarType> >::store(
+						prefetch+(PrefetchCardinality-1)*FILT::VecSize,
+						VectorizedMemOp<typename FILT::ScalarType,
+							PackType<typename FILT::ScalarType> >::load(
+								in+i+ShiftBetweenProcessedAndLastLoaded ) );
+
+				//Store the result of the convolution
+				VectorizedMemOp<typename FILT::ScalarType,
+					PackType<typename FILT::ScalarType> >::store(
+						output.data()+i,
+						ConvolutionAccumulator<typename FILT::ScalarType,
+							FILT,PrefetchBeginIdx,FILT::TapSize-1>::Accumulate(prefetch)
+				);
+
+				//last : left shift buffer to be updated
+				//destination iterator is BEFORE source iterator, use of std::copy is ok
+				std::copy( prefetch+FILT::VecSize,
+						prefetch+PrefetchCardinality*FILT::VecSize,
+						prefetch);
+			}
+
+			//////// handle suffix bound : non vectorized implementation
+			for(int i = LastIndexToProcess; i<inputSize; i++)
+			{
+				for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
+				{
+					output[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * input[positive_modulo(k,inputSize)];
+				}
+			}
 		}
 	}
 
@@ -203,8 +241,8 @@ protected:
 
 int main(int argc, char* argv[])
 {
-	std::vector<float> input(40,1);
-	std::vector<float> output(40,0);
+	std::vector<float> input(4,1);
+	std::vector<float> output(input.size(),0);
 
 	Convolution< MeanFilter<float,1,1> >::Test( input, output );
 
