@@ -7,9 +7,6 @@
 //Local
 #include "../vectorization.h"
 
-//C++11 strongly typed enum
-enum class Vectorization {SSE,AVX};
-
 /*
  * TAP_SIZE_LEFT does only account for number of elements at left,
  * without the current one.
@@ -40,21 +37,16 @@ public:
 };
 
 /*
- * We define an inheritance of the fully generic filter for the "mean filter"
+ * We define an inheritance of the fully generic filter for an arbitrary MyFilter
  */
 template<typename T, int TAP_SIZE_LEFT, int TAP_SIZE_RIGHT>
-class MeanFilter : public Filter<T,TAP_SIZE_LEFT,TAP_SIZE_RIGHT>
+class MyFilter : public Filter<T,TAP_SIZE_LEFT,TAP_SIZE_RIGHT>
 {
 public:
-	MeanFilter()=default;
+	MyFilter()=default;
 public:
 	static const T Buf[Filter<T,TAP_SIZE_LEFT,TAP_SIZE_RIGHT>::TapSize];
 };
-
-/*
- * Compile time declaration of the simple filter using full specialization
- */
-template<> const float MeanFilter<float,1,1>::Buf[3] = {0.33333f,0.33333f,0.33333f};
 
 /*
  * From the prefetch buffer in input, generates a vector that contains
@@ -130,6 +122,18 @@ class Convolution
 {
 public:
 	Convolution()=default;
+	static void NaiveConvolve( const typename FILT::ScalarType* in, typename FILT::ScalarType* out,
+			const int firstIndexIncluded, const int lastIndexExcluded, const int lineSize )
+	{
+		//The naive implementation for small sizes
+		for(int i = firstIndexIncluded; i<lastIndexExcluded;i++)
+		{
+			for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
+			{
+				out[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * in[positive_modulo(k,lineSize)];
+			}
+		}
+	}
 	static void Convolve( const typename FILT::ScalarType* in, typename FILT::ScalarType* out, const int lineSize )
 	{
 		//How many vectors can be easily right processed without trouble loading bounds
@@ -141,28 +145,15 @@ public:
 
 		if( FirstIndexToProcess >= LastIndexToProcess )
 		{
-			//The naive implementation for small sizes
-			for(int i = 0; i<lineSize;i++)
-			{
-				for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
-				{
-					out[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * in[positive_modulo(k,lineSize)];
-				}
-			}
+			NaiveConvolve( in, out, 0, lineSize, lineSize );
 		}else //The vectorized implementation
 		{
 			//////// handle prefix bound : non vectorized implementation
-			for(int i = 0; i<FirstIndexToProcess;i++)
-			{
-				for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
-				{
-					out[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * in[positive_modulo(k,lineSize)];
-				}
-			}
+			NaiveConvolve( in, out, 0, FirstIndexToProcess, lineSize );
 
 			//////// handle vectorizable part
 
-			//Buffer containg the prefetch area to be load in vectorized registers
+			//Buffer containg the prefetch area to be loaded in vectorized registers
 			typename FILT::ScalarType prefetch[PrefetchCardinality*FILT::VecSize];
 
 			//1st : fill the PrefetchCardinality-1 vectors with data
@@ -196,13 +187,7 @@ public:
 			}
 
 			//////// handle suffix bound : non vectorized implementation
-			for(int i = LastIndexToProcess; i<lineSize; i++)
-			{
-				for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
-				{
-					out[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * in[positive_modulo(k,lineSize)];
-				}
-			}
+			NaiveConvolve( in, out, LastIndexToProcess, lineSize, lineSize );
 		}
 	}
 
@@ -222,27 +207,62 @@ protected:
 		*FILT::VecSize;		//multiplied by FILT::VecSize to get a scalar index
 	//non aligned scalar index from prefetch to begin with
 	static const int PrefetchBeginIdx =
-		FILT::VecSize-(FILT::TapSizeLeft%FILT::VecSize);
+			(FILT::TapSizeLeft%FILT::VecSize) == 0 ? 0 :
+			FILT::VecSize-(FILT::TapSizeLeft%FILT::VecSize);
 	/*
 	 * non aligned scalar index difference between first processed index
 	 * and index of last prefetch to be loaded, actually equal to the number
 	 * of vector covering the vecSize+TapSizeRight area minus 1 vector
 	 */
 	static const int ShiftBetweenProcessedAndLastLoaded =
-		((( 2*FILT::VecSize + FILT::TapSizeRight + 1)/
+		((( 2*FILT::VecSize + FILT::TapSizeRight - 1)/
 				FILT::VecSize)-1)*FILT::VecSize;
 };		
+
+/*
+ * Compile time declaration of the simple filter using full specialization
+ */
+template<> const float MyFilter<float,1,1>::Buf[3] = {1.0f,2.0f,3.0f};
+template<> const float MyFilter<float,0,3>::Buf[4] = {1.0f,2.0f,3.0f,4.0f};
+template<> const float MyFilter<float,2,2>::Buf[5] = {1.0f,2.0f,3.0f,4.0f,5.0f};
+template<> const float MyFilter<float,3,3>::Buf[7] = {1.0f,2.0f,3.0f,4.0f,5.0f,6.0f,7.0f};
 
 //build with g++ ./test.cpp -std=c++11 -O3 -o test -DUSE_SSE
 int main(int argc, char* argv[])
 {
-	std::vector<float> input(4,1);
+	std::vector<float> input(30);
 	std::vector<float> output(input.size(),0);
+	std::vector<float> control(input.size(),0);
 
-	Convolution< MeanFilter<float,1,1> >::Convolve( input.data(), output.data(), input.size() );
+	//Fill input vector with ordered values
+	//TODO : comment this out and it work
+	std::iota(input.begin(), input.end(),1.0f);
 
-	std::for_each(output.cbegin(),output.cend(),
-		[](float in){std::cout << "val= "<< in << std::endl;});
-	
+	//Check if results for the naive and vectorized version are equal
+	bool isOK = true;
+	Convolution< MyFilter<float,1,1> >::Convolve( input.data(), output.data(), input.size() );
+	Convolution< MyFilter<float,1,1> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
+	isOK &= std::equal(control.begin(), control.end(), output.begin() );
+
+	//TODO There is still a bug there
+	/*Convolution< MyFilter<float,0,3> >::Convolve( input.data(), output.data(), input.size() );
+	Convolution< MyFilter<float,0,3> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
+	isOK &= std::equal(control.begin(), control.end(), output.begin() );
+
+	Convolution< MyFilter<float,2,2> >::Convolve( input.data(), output.data(), input.size() );
+	Convolution< MyFilter<float,2,2> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
+	isOK &= std::equal(control.begin(), control.end(), output.begin() );
+
+	Convolution< MyFilter<float,3,3> >::Convolve( input.data(), output.data(), input.size() );
+	Convolution< MyFilter<float,3,3> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
+	isOK &= std::equal(control.begin(), control.end(), output.begin() );*/
+
+	if( isOK )
+	{
+		std::cout << "All tests returned True Value"<<std::endl;
+	}else
+	{
+		std::cout << " WARNING : There may be a bug "<<std::endl;
+	}
 	return EXIT_SUCCESS;
 }
