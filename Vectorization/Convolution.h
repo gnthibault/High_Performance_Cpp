@@ -60,6 +60,10 @@ class ConvolutionShifter
 public:
 	static PackType<T> generateNewVec(T* prefetch)
 	{
+		std::cout<<"AT SUPPORT IDX "<<SUPPORT_IDX<<std::endl;
+		std::cout<<"We are loading leftIDX "<<VecLeftIdx<<std::endl;
+		std::cout<<"We are loading rightIDX "<<VecRightIdx<<std::endl;
+
 		//Fetch left part and right part, to be mixed after
 		PackType<T> left	= VectorizedMemOp<T,PackType<T> >::load( prefetch+VecLeftIdx );
 		PackType<T> right	= VectorizedMemOp<T,PackType<T> >::load( prefetch+VecRightIdx );
@@ -73,11 +77,11 @@ public:
 	}
 private:
 	constexpr static int VecSize = sizeof(PackType<T>)/sizeof(T);
-	constexpr static int VecLeftIdx = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)/VecSize)*VecSize;
-	constexpr static int VecRightIdx = VecLeftIdx+VecSize;
-	constexpr static int LeftShift = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)%VecSize);
-	constexpr static int LeftShiftBytes = LeftShift*sizeof(T);
-	constexpr static int RightShiftBytes = (VecSize-LeftShift)*sizeof(T);
+	constexpr static int VecRightIdx = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)/VecSize)*VecSize;
+	constexpr static int VecLeftIdx = VecRightIdx+VecSize;
+	constexpr static int RightShift = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)%VecSize);
+	constexpr static int RightShiftBytes = RightShift*sizeof(T);
+	constexpr static int LeftShiftBytes = (VecSize-RightShift)*sizeof(T);
 };
 
 template<typename T, class FILT, int PREFETCH_BEGIN_IDX, int SUPPORT_IDX>
@@ -128,6 +132,7 @@ public:
 		//The naive implementation for small sizes
 		for(int i = firstIndexIncluded; i<lastIndexExcluded;i++)
 		{
+			std::cout << " firstIndex is "<<firstIndexIncluded<< " and tap size left is "<<FILT::TapSizeLeft<<std::endl;
 			for(int k = i-FILT::TapSizeLeft; k <= i+FILT::TapSizeRight; k++)
 			{
 				out[i] += FILT::Buf[k-i+FILT::TapSizeLeft] * in[positive_modulo(k,lineSize)];
@@ -142,6 +147,11 @@ public:
 			-FILT::TapSizeRight)/FILT::VecSize;	 //right processable area (outside we cannot load the right tap)
 		//Vector aligned scalar index to end with (excluded)		
 		const int LastIndexToProcess = RightProcessableVectPerLine*FILT::VecSize;
+
+		std::cout << "PrefetchCardinality "<<PrefetchCardinality<<std::endl;
+		std::cout << "FirstIndexToProcess "<< FirstIndexToProcess<<std::endl;
+		std::cout << "PrefetchBeginIdx "<<PrefetchBeginIdx<<std::endl;
+		std::cout << "LastIndexToProcess "<<LastIndexToProcess<<std::endl;
 
 		if( FirstIndexToProcess >= LastIndexToProcess )
 		{
@@ -170,6 +180,10 @@ public:
 						VectorizedMemOp<typename FILT::ScalarType,
 							PackType<typename FILT::ScalarType> >::load(
 								in+i+ShiftBetweenProcessedAndLastLoaded ) );
+
+				std::cout << "We are in vectorized loop beginning at index "<<i<<std::endl;
+				std::cout << "Prefetch content is "<<std::endl;
+				std::for_each(prefetch, prefetch+PrefetchCardinality*FILT::VecSize, [](float in){std::cout<<"val = "<<in<<std::endl;});
 
 				//Store the result of the convolution
 				VectorizedMemOp<typename FILT::ScalarType,
@@ -230,12 +244,11 @@ template<> const float MyFilter<float,3,3>::Buf[7] = {1.0f,2.0f,3.0f,4.0f,5.0f,6
 //build with g++ ./test.cpp -std=c++11 -O3 -o test -DUSE_SSE
 int main(int argc, char* argv[])
 {
-	std::vector<float> input(30);
+	std::vector<float> input(4);
 	std::vector<float> output(input.size(),0);
 	std::vector<float> control(input.size(),0);
 
 	//Fill input vector with ordered values
-	//TODO : comment this out and it work
 	std::iota(input.begin(), input.end(),1.0f);
 
 	//Check if results for the naive and vectorized version are equal
@@ -244,18 +257,38 @@ int main(int argc, char* argv[])
 	Convolution< MyFilter<float,1,1> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
 	isOK &= std::equal(control.begin(), control.end(), output.begin() );
 
-	//TODO There is still a bug there
-	/*Convolution< MyFilter<float,0,3> >::Convolve( input.data(), output.data(), input.size() );
+	//Reset values
+	std::fill(output.begin(), output.end(), 0);
+	std::fill(control.begin(), control.end(), 0);
+
+	Convolution< MyFilter<float,0,3> >::Convolve( input.data(), output.data(), input.size() );
 	Convolution< MyFilter<float,0,3> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
 	isOK &= std::equal(control.begin(), control.end(), output.begin() );
+
+	//Reset values
+	std::fill(output.begin(), output.end(), 0);
+	std::fill(control.begin(), control.end(), 0);
+
+	/*std::cout << "Reference vector is : "<<std::endl;
+	std::for_each(control.cbegin(), control.cend(), [](float in){std::cout<<"val = "<<in<<std::endl;});
+	std::cout << "output vector is : "<<std::endl;
+	std::for_each(output.cbegin(), output.cend(), [](float in){std::cout<<"val = "<<in<<std::endl;});*/
 
 	Convolution< MyFilter<float,2,2> >::Convolve( input.data(), output.data(), input.size() );
 	Convolution< MyFilter<float,2,2> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
 	isOK &= std::equal(control.begin(), control.end(), output.begin() );
 
+	//Reset values
+	std::fill(output.begin(), output.end(), 0);
+	std::fill(control.begin(), control.end(), 0);
+
 	Convolution< MyFilter<float,3,3> >::Convolve( input.data(), output.data(), input.size() );
 	Convolution< MyFilter<float,3,3> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
-	isOK &= std::equal(control.begin(), control.end(), output.begin() );*/
+	isOK &= std::equal(control.begin(), control.end(), output.begin() );
+
+	//Reset values
+	std::fill(output.begin(), output.end(), 0);
+	std::fill(control.begin(), control.end(), 0);
 
 	if( isOK )
 	{
