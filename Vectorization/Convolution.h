@@ -5,7 +5,7 @@
 #include <algorithm>
 
 //Local
-#include "../vectorization.h"
+#include "vectorization.h"
 
 /*
  * TAP_SIZE_LEFT does only account for number of elements at left,
@@ -53,7 +53,6 @@ public:
  * the "SUPPORT_IDX" th element of each element of the current "output" vector
  * of the algorithm.
  */
-//TODO see __m256 _mm256_blendv_ps (__m256 a, __m256 b, __m256 mask) for AVX instruction
 template<typename T, int PREFETCH_BEGIN_IDX, int SUPPORT_IDX>
 class ConvolutionShifter
 {
@@ -64,20 +63,17 @@ public:
 		PackType<T> left	= VectorizedMemOp<T,PackType<T> >::load( prefetch+VecLeftIdx );
 		PackType<T> right	= VectorizedMemOp<T,PackType<T> >::load( prefetch+VecRightIdx );
 
-		//Perform shift on both operand
-		PackType<T> l = VectorizedShift<T,PackType<T>,LeftShiftBytes>::LeftShift(left);
-		PackType<T> r = VectorizedShift<T,PackType<T>,RightShiftBytes>::RightShift(right);
-
 		//Return the generated vector
-		return l+r;
+		return VectorizedConcatAndCut<T,PackType<T>,RightShift>::Concat(left,right);
 	}
 private:
 	constexpr static int VecSize = sizeof(PackType<T>)/sizeof(T);
-	constexpr static int VecRightIdx = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)/VecSize)*VecSize;
-	constexpr static int VecLeftIdx = VecRightIdx+VecSize;
+	//Indexes in the prefetch buffer of vector to be loaded
+	constexpr static int VecLeftIdx = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)/VecSize)*VecSize;
+	constexpr static int VecRightIdx = VecLeftIdx+VecSize;
+	//Shift that should be applied to the 2 neighbouring vector to be blended together
 	constexpr static int RightShift = ((PREFETCH_BEGIN_IDX+SUPPORT_IDX)%VecSize);
-	constexpr static int RightShiftBytes = RightShift*sizeof(T);
-	constexpr static int LeftShiftBytes = (VecSize-RightShift)*sizeof(T);
+
 };
 
 template<typename T, class FILT, int PREFETCH_BEGIN_IDX, int SUPPORT_IDX>
@@ -217,70 +213,4 @@ protected:
 	static const int ShiftBetweenProcessedAndLastLoaded =
 		((( 2*FILT::VecSize + FILT::TapSizeRight - 1)/
 				FILT::VecSize)-1)*FILT::VecSize;
-};		
-
-/*
- * Compile time declaration of the simple filter using full specialization
- */
-template<> const float MyFilter<float,1,1>::Buf[3] = {1.0f,2.0f,3.0f};
-template<> const float MyFilter<float,0,3>::Buf[4] = {1.0f,2.0f,3.0f,4.0f};
-template<> const float MyFilter<float,2,2>::Buf[5] = {1.0f,2.0f,3.0f,4.0f,5.0f};
-template<> const float MyFilter<float,3,3>::Buf[7] = {1.0f,2.0f,3.0f,4.0f,5.0f,6.0f,7.0f};
-
-//build with g++ ./test.cpp -std=c++11 -O3 -o test -DUSE_SSE
-int main(int argc, char* argv[])
-{
-
-	for( int i = 1; i<47 ; i++)
-	{
-		std::vector<float> input(i);
-		std::vector<float> output(input.size(),0);
-		std::vector<float> control(input.size(),0);
-
-		//Fill input vector with ordered values
-		std::iota(input.begin(), input.end(),1.0f);
-
-		//Check if results for the naive and vectorized version are equal
-		bool isOK = true;
-		Convolution< MyFilter<float,1,1> >::Convolve( input.data(), output.data(), input.size() );
-		Convolution< MyFilter<float,1,1> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
-		isOK &= std::equal(control.begin(), control.end(), output.begin() );
-
-		//Reset values
-		std::fill(output.begin(), output.end(), 0);
-		std::fill(control.begin(), control.end(), 0);
-
-		Convolution< MyFilter<float,0,3> >::Convolve( input.data(), output.data(), input.size() );
-		Convolution< MyFilter<float,0,3> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
-		isOK &= std::equal(control.begin(), control.end(), output.begin() );
-
-		//Reset values
-		std::fill(output.begin(), output.end(), 0);
-		std::fill(control.begin(), control.end(), 0);
-
-		Convolution< MyFilter<float,2,2> >::Convolve( input.data(), output.data(), input.size() );
-		Convolution< MyFilter<float,2,2> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
-		isOK &= std::equal(control.begin(), control.end(), output.begin() );
-
-		//Reset values
-		std::fill(output.begin(), output.end(), 0);
-		std::fill(control.begin(), control.end(), 0);
-
-		Convolution< MyFilter<float,3,3> >::Convolve( input.data(), output.data(), input.size() );
-		Convolution< MyFilter<float,3,3> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
-		isOK &= std::equal(control.begin(), control.end(), output.begin() );
-
-		//Reset values
-		std::fill(output.begin(), output.end(), 0);
-		std::fill(control.begin(), control.end(), 0);
-
-		if( isOK )
-		{
-			std::cout << "All tests returned True Value"<<std::endl;
-		}else
-		{
-			std::cout << " WARNING : There may be a bug "<<std::endl;
-		}
-	}
-	return EXIT_SUCCESS;
-}
+};

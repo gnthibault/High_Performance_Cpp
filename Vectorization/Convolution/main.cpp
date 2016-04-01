@@ -20,6 +20,13 @@
 #define KERY 1
 #define NRUN 10
 
+/*
+ * This code is a simple example of how to use vectorization to perform
+ * a 3*3 mean filter on an image.
+ * Performance gap is generally very important due to the memory bound
+ * nature of the convolution operation
+ */
+
 // Example of how to profile a code using either cachegrind or callgrind utility
 // g++ ./main.cpp -std=c++11 -g -o test && valgrind --tool=cachegrind --cachegrind-out-file=out ./test
 // cg_annotate out /Absolute/path/main.cpp
@@ -32,7 +39,7 @@
 //perf record ./test
 //perf report
 
-
+//This version handles the bounds
 bool PerformWorkSequentially( const std::vector<float>& vec, std::vector<float>& out )
 {
 	for(int j=0; j<SIZEY; j++ )
@@ -60,6 +67,7 @@ bool PerformWorkSequentially( const std::vector<float>& vec, std::vector<float>&
 	return true;
 }
 
+//This version does not handle the bounds
 bool PerformWorkVectorized( std::vector<float>& vec, std::vector<float>& out )
 {
 	//#pragma omp parallel for
@@ -88,14 +96,14 @@ bool PerformWorkVectorized( std::vector<float>& vec, std::vector<float>& out )
 			__m128 Sum2 = C2;
 
 			//Step 1: compute left part
-			Sum0 += shiftAdd<12,4>(L0,C0);
-			Sum1 += shiftAdd<12,4>(L1,C1);
-			Sum2 += shiftAdd<12,4>(L2,C2);
+			Sum0 += shiftAdd<4,12>(L0,C0);
+			Sum1 += shiftAdd<4,12>(L1,C1);
+			Sum2 += shiftAdd<4,12>(L2,C2);
 
 			//Step 2 : compute right part
-			Sum0 += shiftAdd<4,12>(C0,R0);
-			Sum1 += shiftAdd<4,12>(C1,R1);
-			Sum2 += shiftAdd<4,12>(C2,R2);
+			Sum0 += shiftAdd<12,4>(C0,R0);
+			Sum1 += shiftAdd<12,4>(C1,R1);
+			Sum2 += shiftAdd<12,4>(C2,R2);
 
 			//Now divide by 3*3 and store the result
 			Sum0 = Sum0+Sum1+Sum2;
