@@ -74,21 +74,21 @@ bool PerformWorkVectorized( std::vector<float>& vec, std::vector<float>& out )
 	for(int j=1; j<SIZEY-2; j++ )
 	{
 		//First vector at left
-		__m128 L0 = load(&vec[(j-1)*SIZEX]);
-		__m128 L1 = load(&vec[(j)*SIZEX]);
-		__m128 L2 = load(&vec[(j+1)*SIZEX]);
+		__m128 L0 = VectorizedMemOp<float,__m128>::load(&vec[(j-1)*SIZEX]);
+		__m128 L1 = VectorizedMemOp<float,__m128>::load(&vec[(j)*SIZEX]);
+		__m128 L2 = VectorizedMemOp<float,__m128>::load(&vec[(j+1)*SIZEX]);
 
 		//Second column
-		__m128 C0 = load(&vec[(j-1)*SIZEX+4]);
-		__m128 C1 = load(&vec[(j)*SIZEX+4]);
-		__m128 C2 = load(&vec[(j+1)*SIZEX+4]);
+		__m128 C0 = VectorizedMemOp<float,__m128>::load(&vec[(j-1)*SIZEX+4]);
+		__m128 C1 = VectorizedMemOp<float,__m128>::load(&vec[(j)*SIZEX+4]);
+		__m128 C2 = VectorizedMemOp<float,__m128>::load(&vec[(j+1)*SIZEX+4]);
 
 		for(int i = 4; i<SIZEX; i+=4 )
 		{
 			//Second column
-			__m128 R0 = load(&vec[(j-1)*SIZEX+i+4]);
-			__m128 R1 = load(&vec[(j)*SIZEX+i+4]);
-			__m128 R2 = load(&vec[(j+1)*SIZEX+i+4]);
+			__m128 R0 = VectorizedMemOp<float,__m128>::load(&vec[(j-1)*SIZEX+i+4]);
+			__m128 R1 = VectorizedMemOp<float,__m128>::load(&vec[(j)*SIZEX+i+4]);
+			__m128 R2 = VectorizedMemOp<float,__m128>::load(&vec[(j+1)*SIZEX+i+4]);
 
 			//3 steps to compute the sum
 			__m128 Sum0 = C0;
@@ -96,19 +96,19 @@ bool PerformWorkVectorized( std::vector<float>& vec, std::vector<float>& out )
 			__m128 Sum2 = C2;
 
 			//Step 1: compute left part
-			Sum0 += shiftAdd<4,12>(L0,C0);
-			Sum1 += shiftAdd<4,12>(L1,C1);
-			Sum2 += shiftAdd<4,12>(L2,C2);
+			Sum0 += VectorizedConcatAndCut<float,__m128,3>::Concat(L0,C0);
+			Sum1 += VectorizedConcatAndCut<float,__m128,3>::Concat(L1,C1);
+			Sum2 += VectorizedConcatAndCut<float,__m128,3>::Concat(L2,C2);
 
 			//Step 2 : compute right part
-			Sum0 += shiftAdd<12,4>(C0,R0);
-			Sum1 += shiftAdd<12,4>(C1,R1);
-			Sum2 += shiftAdd<12,4>(C2,R2);
+			Sum0 += VectorizedConcatAndCut<float,__m128,1>::Concat(C0,R0);
+			Sum1 += VectorizedConcatAndCut<float,__m128,1>::Concat(C1,R1);
+			Sum2 += VectorizedConcatAndCut<float,__m128,1>::Concat(C2,R2);
 
 			//Now divide by 3*3 and store the result
 			Sum0 = Sum0+Sum1+Sum2;
 			Sum0 = Sum0/9;
-			store(&out[j*SIZEX+i],Sum0);
+			VectorizedMemOp<float,__m128>::store(&out[j*SIZEX+i],Sum0);
 
 			//At the end of the computation, we need to
 			//swap the 2 first lines
