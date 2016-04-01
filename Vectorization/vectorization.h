@@ -135,8 +135,9 @@ public:
 			shufl = _mm_add_ps(shufl, shufl2);
 			//shufl = |3+1|2+0|1+3|0+2| + |2+0|3+1|0+2|1+3|
 
-			//Extract the right value
+			//Copy the lower single-precision (32-bit) floating-point element of a to dst.
 			return _mm_cvtss_f32( shufl );
+			//We also could have used to extract the 0th element:
 			//return _mm_extract_ps (shufl a, 0);
 		}
 	};
