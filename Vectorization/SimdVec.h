@@ -150,13 +150,13 @@ public:
     //of vector size
     PackType<T> get( size_t idx ) const
     {
-         return load(m_vec.data()+idx);
+         return VectorizedMemOp<T,PackType<T>>::load(m_vec.data()+idx);
     }
 
     //Unsafe set
     void set( size_t idx, PackType<T> val )
 	{
-		 store( m_vec.data()+idx, val );
+    	VectorizedMemOp<T,PackType<T>>::store( m_vec.data()+idx, val );
 	}
 
 protected:

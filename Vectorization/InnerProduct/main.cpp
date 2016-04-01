@@ -61,19 +61,19 @@ int main( int argc, char* argv[] )
 		start = std::chrono::steady_clock::now();
 		__m128 accumulator = {0.0f,0.0f,0.0f,0.0f};
 
+		//Mixing both vectorization and thread level parallelization
 		#pragma omp parallel for reduction(+:accumulator)
 		for( int i=0; i<SIZE; i+= 128/(sizeof(float)*8) )// 128 bits sse2 / (float = 4 octets * 8 bits par octets)
 		{
-			accumulator =
-					addFloat( 	accumulator,
-								mulFloat( load(floatVec0.data()+i), load(floatVec1.data()+i) ) );
+			accumulator +=	VectorizedMemOp<float,__m128>::load(floatVec0.data()+i) *
+					VectorizedMemOp<float,__m128>::load(floatVec1.data()+i);
 		}
-		resultat = sumFloat( accumulator );
+		resultat = VectorSum<float,__m128>::ReduceSum( accumulator );
 		stop = std::chrono::steady_clock::now();
 		diff = stop - start;
 		msec = std::min( msec, std::chrono::duration<double, std::milli>(diff).count());
 	}
-	std::cout << "Speedup for vectorized version is "<< refMsec/msec << " msec "<< std::endl;
+	std::cout << "Speedup for vectorized version is "<< refMsec/msec << std::endl;
 	msec=std::numeric_limits<double>::max();
 
 	std::cout << "Resultat attendu : "<< reference << " Resultat Obtenu : "<< resultat << std::endl;

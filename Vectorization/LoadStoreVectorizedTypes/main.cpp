@@ -19,7 +19,7 @@
 //Local
 #define USE_SSE
 #include "../vectorization.h"
-#include "SimdVec.h"
+#include "../SimdVec.h"
 
 #define NRUN 100
 
@@ -92,7 +92,9 @@ int main( int argc, char* argv[] )
 		#pragma unroll
 		for( int i=0; i<SIZE; i+= 128/(sizeof(float)*8) )// 128bits sse2/(1float=4bytes*8bits)
 		{
-			store( floatDst.data()+i, load(floatVec.data()+i) );
+			VectorizedMemOp<float,__m128>::store(
+					floatDst.data()+i,
+					VectorizedMemOp<float,__m128>::load(floatVec.data()+i) );
 		}
 		stop = std::chrono::steady_clock::now();
 		diff = stop - start;
@@ -108,8 +110,8 @@ int main( int argc, char* argv[] )
 
 
 	//A more functional way to do this copy, using a handwritten container
-	Sse2Vec<float> sse2VecSrc( SIZE, 1 );
-	Sse2Vec<float> sse2VecDst( SIZE, 0 );
+	SimdVec<float> sse2VecSrc( SIZE, 1 );
+	SimdVec<float> sse2VecDst( SIZE, 0 );
 	for(int k = 0; k< NRUN; k++)
 	{
 		auto dst = sse2VecDst.begin();
