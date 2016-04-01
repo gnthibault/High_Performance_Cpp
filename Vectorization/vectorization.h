@@ -29,7 +29,7 @@
 	#include <arm_neon.h>
 #endif
 
-//Too dangerous to define default implementation
+//Default implementation work for non-vectorized case
 template<typename T, class VecT>
 class VectorizedMemOp
 {
@@ -144,6 +144,32 @@ public:
 	}
 };
 
+/*
+ * Concatenate two vectors that are given as input
+ * then right shift the results of RIGHT_SHIFT elements
+ */
+template<typename T, class VecT, int RIGHT_SHIFT>
+class VectorizedConcatAndCut
+{
+public:
+	//Defaulted implementation is to rely on individual shifting
+	//and add
+	static VecT Concat( VecT left, VecT right )
+	{
+		//Perform shift on both operand
+		//The left one should be right shifted and right one should be left shifted
+		VecT r = VectorizedShift<T,VecT,RightShiftBytes>::RightShift(left);
+		VecT l = VectorizedShift<T,VecT,LeftShiftBytes>::LeftShift(right);
+
+		//return sum of the two
+		return r + l;
+	}
+protected:
+	constexpr static int VecSize = sizeof(VecT)/sizeof(T);
+	constexpr static int RightShiftBytes = RIGHT_SHIFT*sizeof(T);
+	constexpr static int LeftShiftBytes = (VecSize-RIGHT_SHIFT)*sizeof(T);
+};
+
 #ifdef USE_SSE
 	template<unsigned char SHIFT>
 	class VectorizedShift<float,__m128,SHIFT>
@@ -158,6 +184,19 @@ public:
 			return (__m128)_mm_srli_si128( (__m128i)input, SHIFT );
 		}
 	};
+#elif defined USE_AVX
+	template<int RIGHT_SHIFT>
+	class VectorizedConcatAndCut<float, __m256,RIGHT_SHIFT>
+	{
+	public:
+		//Optimized specific intrisic for concat / shift / cut in AVX
+		constexpr static __m256 Concat( __m256 left, __m256 right )
+		{
+			return (__m256)_mm256_alignr_epi32((__m256i)left,(__m256i)right,RIGHT_SHIFT);
+		}
+	};
+#elif defined USE_NEON
+
 #endif
 
 
