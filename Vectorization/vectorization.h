@@ -19,6 +19,7 @@
  * Include for x86 intrinsics
  * Documentation for the various intrinsics can be found on
  * https://software.intel.com/sites/landingpage/IntrinsicsGuide/
+ * https://gcc.gnu.org/onlinedocs/gcc-4.8.5/gcc/ARM-NEON-Intrinsics.html
  */
 #ifdef USE_SSE 			//compile using gcc -msse2
 	#include "xmmintrin.h"
