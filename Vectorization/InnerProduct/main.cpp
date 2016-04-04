@@ -25,7 +25,7 @@
 #define SIZE 524288
 //#define SIZE 8
 
-//g++ ./main.cpp -O3 -std=c++11 -msse2 -ffast-math -fopenmp -o test
+//g++ ./main.cpp -O3 -std=c++11 -msse2 -ffast-math -o test
 int main( int argc, char* argv[] )
 {
 	std::vector<float,boost::alignment::aligned_allocator<float> > floatVec0(SIZE,2);

@@ -20,12 +20,12 @@
  * Documentation for the various intrinsics can be found on
  * https://software.intel.com/sites/landingpage/IntrinsicsGuide/
  */
-#ifdef USE_SSE
+#ifdef USE_SSE 			//compile using gcc -msse2
 	#include "xmmintrin.h"
 	#include "emmintrin.h"
-#elif defined USE_AVX
+#elif defined USE_AVX 	//compile using gcc -mavx2
 	#include "immintrin.h"
-#elif defined USE_NEON
+#elif defined USE_NEON 	//compile using g++-arm-linux-gnu.x86_64 -mfpu=neon
 	#include <arm_neon.h>
 #endif
 
@@ -202,17 +202,26 @@ protected:
 	};
 #elif defined USE_AVX
 	template<int RIGHT_SHIFT>
-	class VectorizedConcatAndCut<float, __m256,RIGHT_SHIFT>
+	class VectorizedConcatAndCut<float,__m256,RIGHT_SHIFT>
 	{
 	public:
-		//Optimized specific intrisic for concat / shift / cut in AVX
+		//Optimized specific intrinsic for concat / shift / cut in AVX
 		constexpr static __m256 Concat( __m256 left, __m256 right )
 		{
-			return (__m256)_mm256_alignr_epi32((__m256i)left,(__m256i)right,RIGHT_SHIFT);
+			return (__m256)_mm256_alignr_epi8((__m256i)left,(__m256i)right,RIGHT_SHIFT*sizeof(float));
 		}
 	};
 #elif defined USE_NEON
-
+	template<int RIGHT_SHIFT>
+	class VectorizedConcatAndCut<float,float32x4_t,RIGHT_SHIFT>
+	{
+	public:
+		//Optimized specific intrinsic for concat / shift / cut in AVX
+		constexpr static float32x4_t Concat( float32x4_t left, float32x4_t right )
+		{
+			return vextq_f32( left, right, RIGHT_SHIFT*sizeof(float)) ;
+		}
+	};
 #endif
 
 
