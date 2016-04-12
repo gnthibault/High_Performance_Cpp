@@ -21,7 +21,10 @@ template<> const float MyFilter<float,0,3>::Buf[4] = {1.0f,2.0f,3.0f,4.0f};
 template<> const float MyFilter<float,2,2>::Buf[5] = {1.0f,2.0f,3.0f,4.0f,5.0f};
 template<> const float MyFilter<float,3,3>::Buf[7] = {1.0f,2.0f,3.0f,4.0f,5.0f,6.0f,7.0f};
 
-//build with g++ ./test.cpp -std=c++11 -O3 -o test -DUSE_SSE
+//build with
+//g++ ./main.cpp -std=c++11 -O3 -msse2 -o test -DUSE_SSE
+//g++ ./main.cpp -std=c++11 -O3 -mavx2 -o test -DUSE_AVX
+
 int main(int argc, char* argv[])
 {
 
