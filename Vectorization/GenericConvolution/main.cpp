@@ -28,7 +28,7 @@ template<> const float MyFilter<float,3,3>::Buf[7] = {1.0f,2.0f,3.0f,4.0f,5.0f,6
 int main(int argc, char* argv[]) {
 
   for (int i = 1; i<=512 ; i++) {
-    std::vector<float> input(i);
+    std::vector<float,boost::align::aligned_allocator<float>> input(i);
     std::vector<float> output(input.size(),0);
     std::vector<float> control(input.size(),0);
 
