@@ -240,5 +240,7 @@ template<typename T> struct PackedType { typedef T type; };//Default packed type
 	template<> struct PackedType<float> { using type = float32x4_t; };
 #endif
 template<typename T> using PackType = typename PackedType<T>::type;
+template<typename T> using PackAllocator =
+  boost::alignment::aligned_allocator<T,sizeof(PackType<T>)>;
 
 #endif /* VECTORIZATION_H_ */
