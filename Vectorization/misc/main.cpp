@@ -23,6 +23,7 @@ typedef  boost::alignment::aligned_allocator<int,sizeof(__m256i)>
 typedef std::vector<int,PackAllocator> vector;
 
 //g++ -O3 -mavx2 -std=c++14 ./main.cpp -o ./test
+//for ((i=0; i<16; i++)); do g++ -O3 -mavx2 -std=c++14 ./main.cpp -DSHIFT=$i -o ./test; ./test >> permute.txt; done;
 int main(int argc, char* argvi[]) {
 
   auto print = [](int i) { std::cout<<i; };
@@ -40,7 +41,7 @@ int main(int argc, char* argvi[]) {
 
   std::cout<<"-- i = "<<SHIFT<<" --"<<std::endl;
   MemOp::store(a,_mm256_permute2x128_si256(left,right,SHIFT));
-  std::for_each(v.data(),v.data()+8,print);
+  std::for_each(v.data(),v.data()+16,print);
   std::cout << std::endl;
 
   return EXIT_SUCCESS;
