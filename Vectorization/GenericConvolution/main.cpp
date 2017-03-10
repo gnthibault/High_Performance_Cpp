@@ -18,12 +18,13 @@
  */
 template<> const float MyFilter<float,1,1>::Buf[3] = {1.0f,2.0f,3.0f};
 template<> const float MyFilter<float,0,3>::Buf[4] = {1.0f,2.0f,3.0f,4.0f};
+template<> const float MyFilter<float,0,1>::Buf[2] = {1.0f,2.0f};
 template<> const float MyFilter<float,2,2>::Buf[5] = {1.0f,2.0f,3.0f,4.0f,5.0f};
 template<> const float MyFilter<float,3,3>::Buf[7] = {1.0f,2.0f,3.0f,4.0f,5.0f,6.0f,7.0f};
 
 //build with
-//g++ ./main.cpp -std=c++11 -O3 -msse2 -o test -DUSE_SSE
-//g++ ./main.cpp -std=c++11 -O3 -mavx2 -o test -DUSE_AVX
+//g++ ./main.cpp -std=c++14 -O3 -msse2 -o test -DUSE_SSE
+//g++ ./main.cpp -std=c++14 -O3 -mavx2 -o test -DUSE_AVX
 
 int main(int argc, char* argv[]) {
 
@@ -39,6 +40,14 @@ int main(int argc, char* argv[]) {
     bool isOK = true;
     Convolution< MyFilter<float,1,1> >::Convolve( input.data(), output.data(), input.size() );
     Convolution< MyFilter<float,1,1> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
+    isOK &= std::equal(control.begin(), control.end(), output.begin() );
+    
+    //Reset values
+    std::fill(output.begin(), output.end(), 0);
+    std::fill(control.begin(), control.end(), 0);
+
+    Convolution< MyFilter<float,0,1> >::Convolve( input.data(), output.data(), input.size() );
+    Convolution< MyFilter<float,0,1> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
     isOK &= std::equal(control.begin(), control.end(), output.begin() );
 
     //Reset values
@@ -77,3 +86,10 @@ int main(int argc, char* argv[]) {
   }
   return EXIT_SUCCESS;
 }
+
+/*auto print = [](auto i) { std::cout<<"- "<<i<<" -"; };
+std::for_each(output.cbegin(),output.cend(),print);
+std::cout<<std::endl;
+std::for_each(control.cbegin(),control.cend(),print);
+std::cout<<std::endl;*/
+

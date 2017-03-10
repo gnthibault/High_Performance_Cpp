@@ -189,7 +189,7 @@ public:
 }
 
 protected:
-  //To out 1 processed vector, how many vector should we load
+  //To output 1 processed vector, how many vector should we load
   static const int PrefetchCardinality =
     // left tap size part
     ((FILT::TapSizeLeft+FILT::VecSize-1)/FILT::VecSize+

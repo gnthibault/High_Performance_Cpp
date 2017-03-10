@@ -202,23 +202,31 @@ protected:
 		}
 	};
 #elif defined USE_AVX
-	template<int RIGHT_SHIFT>
-	class VectorizedConcatAndCut<float,__m256,RIGHT_SHIFT>
-	{
-	public:
-		//Optimized specific intrinsic for concat / shift / cut in AVX
-		constexpr static __m256 Concat( __m256 left, __m256 right )
-		{
-			return (__m256)_mm256_alignr_epi8((__m256i)left,(__m256i)right,RIGHT_SHIFT*sizeof(float));
-		}
-	};
+template<int RIGHT_SHIFT>
+class VectorizedConcatAndCut<float,__m256,RIGHT_SHIFT> {
+ public:
+  //Optimized specific intrinsic for concat / shift / cut in AVX
+  static __m256 Concat( __m256 left, __m256 right ) {
+    //return (__m256)_mm256_alignr_epi8((__m256i)left,
+    //    (__m256i)right, (unsigned int)RIGHT_SHIFT*sizeof(float));
+    //TODO TN: look at https://software.intel.com/en-us/blogs/2015/01/13/programming-using-avx2-permutations
+    // Do whatever your compiler needs to make this buffer 64-byte aligned.
+    // You want to avoid the possibility of a page-boundary crossing load.
+    char buffer[64];
+    // Two aligned stores to fill the buffer.
+    _mm256_store_si256((__m256i *)&buffer[0], (__m256i)left);
+    _mm256_store_si256((__m256i *)&buffer[32], (__m256i)right);
+    //Misaligned load to get the data we want.
+    return (__m256)_mm256_loadu_si256((__m256i*)&buffer[RIGHT_SHIFT*sizeof(float)]);
+  }
+};
 #elif defined USE_NEON
 	template<int RIGHT_SHIFT>
 	class VectorizedConcatAndCut<float,float32x4_t,RIGHT_SHIFT>
 	{
 	public:
 		//Optimized specific intrinsic for concat / shift / cut in AVX
-		constexpr static float32x4_t Concat( float32x4_t left, float32x4_t right )
+		static float32x4_t Concat( float32x4_t left, float32x4_t right )
 		{
 			return vextq_f32( left, right, RIGHT_SHIFT*sizeof(float)) ;
 		}
