@@ -31,9 +31,17 @@ int main(int argc, char* argvi[]) {
     1,1,1,1,1,1,1,1};
 
   std::for_each(v.cbegin(),v.cend(),print);
-
+  std::cout << "Now, let's tranform that"<<std::endl;
   auto* a = reinterpret_cast<__m256i*>(v.data());
   auto* b = a+1; 
+
+  auto left = MemOp::load(a);
+  auto right = MemOp::load(b);
+  
+  MemOp::store(a,_mm256_permute2x128_si256(left,right,0));
+
+  std::for_each(v.data(),v.data()+4,print);
+
   return EXIT_SUCCESS;
 }
 
