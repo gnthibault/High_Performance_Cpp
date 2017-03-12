@@ -41,7 +41,7 @@ int main(int argc, char* argvi[]) {
 
   std::cout<<"-- i = "<<SHIFT<<" --"<<std::endl;
   MemOp::store(a,_mm256_alignr_epi8(left,right,SHIFT));
-  std::for_each(v.data(),v.data()+16,print);
+  std::for_each(v.data(),v.data()+8,print);
   std::cout << std::endl;
 
   return EXIT_SUCCESS;
