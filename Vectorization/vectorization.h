@@ -8,12 +8,16 @@
 #ifndef VECTORIZATION_H_
 #define VECTORIZATION_H_
 
-//STL
-#include <vector>
+// STL
+#include <cassert>
 #include <exception>
+#include <vector>
 
-//Boost
+// Boost
 #include <boost/align/aligned_allocator.hpp>
+
+// Local
+#include "MetaHelper.h"
 
 /*
  * Include for x86 intrinsics
@@ -177,27 +181,55 @@ class VectorizedShift<float,__m128,SHIFT> {
   }
 };
 #elif defined USE_AVX
+template<int Val, class enable=void>
+struct AVX256ConcatandCut {
+  __m256 static Concat(__m256 left, __m256 right) {
+    assert(("Vectorized Shift AVX256 cannot account for shift > 256 bits",
+          false));
+    return left;
+  }
+};
+
+template<int Val>
+struct AVX256ConcatandCut<Val, typename ctrange<0, 1, Val>::enabled> {
+  __m256 static Concat(__m256 left, __m256 right) {
+    return left;
+  }
+};
+template<int Val>
+struct AVX256ConcatandCut<Val, typename ctrange<1, 4, Val>::enabled> {
+  __m256 static Concat(__m256 left, __m256 right) {
+    right=_mm256_permute2x128_si256(left,right,33);
+    return _mm256_alignr_epi8(right,left,Val*sizeof(int));
+  }
+};
+template<int Val>
+struct AVX256ConcatandCut<Val, typename ctrange<4, 5, Val>::enabled> {
+  __m256 static Concat(__m256 left, __m256 right) {
+    return _mm256_permute2x128_si256(left,right,33);
+  }
+};
+template<int Val>
+struct AVX256ConcatandCut<Val, typename ctrange<5, 8, Val>::enabled> {
+  __m256 static Concat(__m256 left, __m256 right) {
+    left=_mm256_permute2x128_si256(left,right,33);
+    return _mm256_alignr_epi8(right,left,(Val-4)*sizeof(int));
+  }
+};
+
+template<int Val>
+struct AVX256ConcatandCut<Val, typename ctrange<8, 9, Val>::enabled> {
+  __m256 static Concat(__m256 left, __m256 right) {
+    return right;
+  }
+};
+
 template<int RIGHT_SHIFT>
 class VectorizedConcatAndCut<float,__m256,RIGHT_SHIFT> {
  public:
   //Optimized specific intrinsic for concat / shift / cut in AVX
   static __m256 Concat( __m256 left, __m256 right ) {
-    
-    left = (__mm256)_mm256_permute2x128_si256((__m256i)left,
-        (__m256i)right, 0);
-    return (__m256)_mm256_alignr_epi8((__m256i)left,
-        (__m256i)right, (unsigned int)RIGHT_SHIFT*sizeof(float));
-    
-    
-    //TODO TN: look at https://software.intel.com/en-us/blogs/2015/01/13/programming-using-avx2-permutations
-    // Do whatever your compiler needs to make this buffer 64-byte aligned.
-    // You want to avoid the possibility of a page-boundary crossing load.
-    //char buffer[64];
-    // Two aligned stores to fill the buffer.
-    //_mm256_store_si256((__m256i *)&buffer[0], (__m256i)left);
-    //_mm256_store_si256((__m256i *)&buffer[32], (__m256i)right);
-    //Misaligned load to get the data we want.
-    //return (__m256)_mm256_loadu_si256((__m256i*)&buffer[RIGHT_SHIFT*sizeof(float)]);
+    return AVX256ConcatandCut<SHIFT>::Concat(left,right);
   }
 };
 #elif defined USE_NEON
