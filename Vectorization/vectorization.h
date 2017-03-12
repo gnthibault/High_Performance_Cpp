@@ -183,7 +183,7 @@ class VectorizedShift<float,__m128,SHIFT> {
 #elif defined USE_AVX
 template<int Val, class enable=void>
 struct AVX256ConcatandCut {
-  __m256 static Concat(__m256 left, __m256 right) {
+  static __m256 Concat(__m256 left, __m256 right) {
     assert(("Vectorized Shift AVX256 cannot account for shift > 256 bits",
           false));
     return left;
@@ -192,28 +192,30 @@ struct AVX256ConcatandCut {
 
 template<int Val>
 struct AVX256ConcatandCut<Val, typename ctrange<0, 1, Val>::enabled> {
-  __m256 static Concat(__m256 left, __m256 right) {
+  static __m256 Concat(__m256 left, __m256 right) {
     return left;
   }
 };
 template<int Val>
 struct AVX256ConcatandCut<Val, typename ctrange<1, 4, Val>::enabled> {
-  __m256 static Concat(__m256 left, __m256 right) {
-    right=_mm256_permute2x128_si256(left,right,33);
-    return _mm256_alignr_epi8(right,left,Val*sizeof(int));
+  static __m256 Concat(__m256 left, __m256 right) {
+    right=(__m256)_mm256_permute2x128_si256((__m256i)left,(__m256i)right,33);
+    return (__m256)_mm256_alignr_epi8((__m256i)right,(__m256i)left,
+        Val*sizeof(int));
   }
 };
 template<int Val>
 struct AVX256ConcatandCut<Val, typename ctrange<4, 5, Val>::enabled> {
-  __m256 static Concat(__m256 left, __m256 right) {
-    return _mm256_permute2x128_si256(left,right,33);
+  static __m256 Concat(__m256 left, __m256 right) {
+    return (__m256)_mm256_permute2x128_si256((__m256i)left,(__m256i)right,33);
   }
 };
 template<int Val>
 struct AVX256ConcatandCut<Val, typename ctrange<5, 8, Val>::enabled> {
-  __m256 static Concat(__m256 left, __m256 right) {
-    left=_mm256_permute2x128_si256(left,right,33);
-    return _mm256_alignr_epi8(right,left,(Val-4)*sizeof(int));
+  static __m256 Concat(__m256 left, __m256 right) {
+    left=(__m256)_mm256_permute2x128_si256((__m256i)left,(__m256i)right,33);
+    return (__m256)_mm256_alignr_epi8((__m256i)right,(__m256i)left,
+        (Val-4)*sizeof(int));
   }
 };
 
@@ -229,7 +231,7 @@ class VectorizedConcatAndCut<float,__m256,RIGHT_SHIFT> {
  public:
   //Optimized specific intrinsic for concat / shift / cut in AVX
   static __m256 Concat( __m256 left, __m256 right ) {
-    return AVX256ConcatandCut<SHIFT>::Concat(left,right);
+    return AVX256ConcatandCut<RIGHT_SHIFT>::Concat(left,right);
   }
 };
 #elif defined USE_NEON
