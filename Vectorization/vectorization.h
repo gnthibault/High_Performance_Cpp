@@ -240,7 +240,7 @@ class VectorizedConcatAndCut<float,float32x4_t,RIGHT_SHIFT> {
  public:
   //Optimized specific intrinsic for concat / shift / cut in AVX
   static float32x4_t Concat( float32x4_t left, float32x4_t right ) {
-    return vextq_f32( left, right, RIGHT_SHIFT*sizeof(float)) ;
+    return vextq_f32( left, right, RIGHT_SHIFT) ;
   }
 };
 #endif
