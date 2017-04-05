@@ -25,14 +25,23 @@
  * https://software.intel.com/sites/landingpage/IntrinsicsGuide/
  * https://gcc.gnu.org/onlinedocs/gcc-4.8.5/gcc/ARM-NEON-Intrinsics.html
  */
-#ifdef USE_SSE 			//compile using gcc -msse2
-	#include "xmmintrin.h"
-	#include "emmintrin.h"
-#elif defined USE_AVX 	//compile using gcc -mavx2
-	#include "immintrin.h"
-#elif defined USE_NEON 	//compile using g++-arm-linux-gnu.x86_64 -mfpu=neon
-	#include <arm_neon.h>
+#ifdef USE_SSE 			//compile using g++ -std=c++11 -msse2 -O3
+  #include "xmmintrin.h"
+  #include "emmintrin.h"
+#elif defined USE_AVX 	//compile using g++ -std=c++11 -march=core-avx2 -O3
+  #include "immintrin.h"
+#elif defined USE_AVX512 //compile using g++ -std=c++11 -mfma -mavx512f -O3 or
+                         // -march=knl or -march=skylake-avx512
+  #include "zmmintrin.h"
+#elif defined USE_NEON 	//compile using g++-arm-linux-gnu.x86_64 -std=c++11 -mfpu=neon -O3
+  #include <arm_neon.h>
 #endif
+
+/**
+Check vectorization with:
+gcc -g -c test.c
+objdump -d -M intel -S test.o */
+
 
 //Default implementation work for non-vectorized case
 template<typename T, class VecT>
@@ -133,7 +142,7 @@ class VectorSum<float,__m128> {
 #endif
 
 //Perform left and right shift
-template<typename T, class VecT, unsigned char SHIFT>
+template<typename T, class VecT, int SHIFT>
 class VectorizedShift {
  public:
   //Defaulted implementation for scalar type: no shift
@@ -170,7 +179,7 @@ class VectorizedConcatAndCut {
 };
 
 #ifdef USE_SSE
-template<unsigned char SHIFT>
+template<int SHIFT>
 class VectorizedShift<float,__m128,SHIFT> {
  public:
   constexpr static __m128 LeftShift( __m128 input ) {
@@ -215,7 +224,7 @@ struct AVX256ConcatandCut<Val, typename ctrange<5, 8, Val>::enabled> {
   static __m256 Concat(__m256 left, __m256 right) {
     left=(__m256)_mm256_permute2x128_si256((__m256i)left,(__m256i)right,33);
     return (__m256)_mm256_alignr_epi8((__m256i)right,(__m256i)left,
-        (Val-4)*sizeof(int));
+       (Val-4)*sizeof(int));
   }
 };
 

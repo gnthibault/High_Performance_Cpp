@@ -1,0 +1,86 @@
+//STL
+#include <vector>
+#include <cstdlib>
+#include <iostream>
+#include <algorithm>
+#include <type_traits>
+#include <cassert>
+
+//Boost
+#include <boost/align/aligned_allocator.hpp>
+
+//Intel AVX intrinsics
+#include "immintrin.h"
+
+struct MemOp {
+  static __m128 load( const float* ptr ) {
+    return _mm_load_ps( ptr );
+  }
+  static void store( float* ptr, __m128 value) {
+    _mm_store_ps( ptr, value );
+  }
+};
+
+template<typename T, class VecT, int SHIFT>
+struct SubsampledConcatAndCut {
+  static __m128  Concat( __m128 a, __m128 b, __m128 c) {
+
+  }
+};
+
+template<>
+struct SubsampledConcatAndCut<float,__m128,0> {
+  static __m128  Concat( __m128 a, __m128 b, __m128 c) {
+    return _mm_blend_ps( _mm_permute_ps(a,216),_mm_permute_ps(b,141),
+      0b00001100);
+  }
+};
+template<>
+struct SubsampledConcatAndCut<float,__m128,1> {
+  static __m128  Concat( __m128 a, __m128 b, __m128 c) {
+    return _mm_blend_ps( _mm_permute_ps(a,141),_mm_permute_ps(b,216),
+      0b00001100);
+  }
+};
+template<>
+struct SubsampledConcatAndCut<float,__m128,2> {
+  static __m128  Concat( __m128 a, __m128 b, __m128 c) {
+    auto x = _mm_blend_ps( _mm_permute_ps(a,210),_mm_permute_ps(b,225),
+      0b00001110);
+    return _mm_blend_ps( x,_mm_permute_ps(c,57),0b00001000);
+  }
+};
+template<>
+struct SubsampledConcatAndCut<float,__m128,3> {
+  static __m128  Concat( __m128 a, __m128 b, __m128 c) {
+    auto x = _mm_blend_ps( _mm_permute_ps(a,147),_mm_permute_ps(b,180),
+      0b00001110);
+    return _mm_blend_ps( x,_mm_permute_ps(c,120),0b00001000);
+  }
+};
+
+typedef  boost::alignment::aligned_allocator<int,sizeof(__m128)>
+  PackAllocator;
+typedef std::vector<float,PackAllocator> vector;
+
+//g++ -O3 -mavx -std=c++14 -DPARAM=0 ./DyadicSubsample128float.cpp -o ./test
+//for ((i=0; i<4; i++)); do g++ -O3 -mavx -std=c++14 ./DyadicSubsample128float.cpp -DPARAM=$i -o ./test; ./test >> Dyadicfloat128.txt; done;
+int main(int argc, char* argvi[]) {
+
+  auto print = [](int i) { std::cout<<i; };
+
+  vector v={1,2,3,4,5,6,7,8,9,10,11,12};
+
+  auto a = MemOp::load(v.data());
+  auto b = MemOp::load(v.data()+4);
+  auto c = MemOp::load(v.data()+8);
+
+
+  std::cout<<"-- i = "<<PARAM<<" --"<<std::endl;
+  MemOp::store(v.data(),SubsampledConcatAndCut<float,__m128,PARAM>::Concat(a,b,c));
+  std::for_each(v.data(),v.data()+4,print);
+  std::cout << std::endl;
+
+  return EXIT_SUCCESS;
+}
+
