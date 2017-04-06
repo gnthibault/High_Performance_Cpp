@@ -23,24 +23,21 @@ typedef  boost::alignment::aligned_allocator<int,sizeof(__m256i)>
 typedef std::vector<int,PackAllocator> vector;
 
 //g++ -O3 -mavx2 -std=c++14 ./main.cpp -o ./test
-//for ((i=0; i<256; i++)); do g++ -O3 -mavx2 -std=c++14 ./main.cpp -DSHIFT=$i -o ./test; ./test >> permute.txt; done;
+//for ((i=0; i<256; i++)); do g++ -O3 -mavx2 -std=c++14 ./main.cpp -DSHIFT=$i -o ./test; ./test >> permute464.txt; done;
 int main(int argc, char* argvi[]) {
 
   auto print = [](int i) { std::cout<<i; };
 
-  vector v={0,0,0,0,1,1,1,1,
-    2,2,2,2,3,3,3,3};
+  vector v={1,1,2,2,3,3,4,4};
 
   //std::for_each(v.cbegin(),v.cend(),print);
   //std::cout << "Now, let's tranform that"<<std::endl;
   auto* a = reinterpret_cast<__m256i*>(v.data());
-  auto* b = a+1; 
 
   auto left = MemOp::load(a);
-  auto right = MemOp::load(b);
 
   std::cout<<"-- i = "<<SHIFT<<" --"<<std::endl;
-  MemOp::store(a,_mm256_permute2x128_si256(left,right,SHIFT));
+  MemOp::store(a,_mm256_permute4x64_epi64(left,SHIFT));
   std::for_each(v.data(),v.data()+8,print);
   std::cout << std::endl;
 
