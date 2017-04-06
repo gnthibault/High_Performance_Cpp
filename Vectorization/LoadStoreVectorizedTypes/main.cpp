@@ -21,6 +21,9 @@
 #include "../vectorization.h"
 #include "../SimdVec.h"
 
+// forward-declaration to allow use in Iter
+template<typename T> class SimdVec;
+
 #define NRUN 100
 
 /*

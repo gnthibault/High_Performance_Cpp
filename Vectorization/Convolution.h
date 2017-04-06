@@ -5,7 +5,8 @@
 #include <algorithm>
 
 //Local
-#include "vectorization.h"
+#include "ConcatAndCut.h"
+#include "MemoryHelper.h"
 
 /*
  * TAP_SIZE_LEFT does only account for number of elements at left,

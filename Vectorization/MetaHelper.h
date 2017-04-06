@@ -1,3 +1,7 @@
+#ifndef METAHELPER_H
+#define METAHELPER_H
+
+
 //STL
 #include <type_traits>
 
@@ -10,3 +14,4 @@ struct ctrange<Begin, End, Val,
   using enabled = void;
 };
 
+#endif // METAHELPER_H

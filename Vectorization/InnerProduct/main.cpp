@@ -21,6 +21,7 @@
 #define USE_SSE
 #include "../vectorization.h"
 
+
 #define NRUN 100
 #define SIZE 524288
 //#define SIZE 8
