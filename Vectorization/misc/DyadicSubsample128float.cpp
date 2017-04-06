@@ -66,13 +66,13 @@ struct SubsampledConcatAndCut<float,__m128,3> {
 template<>
 struct SubsampledConcatAndCut<double,__m128d,0> {
   static __m128d  Concat( __m128d a, __m128d b) {
-    return _mm_blend_pd( a,_mm_permute_pd(b,1),0b00000010);
+    return _mm_shuffle_pd(a,b,0b00000000);
   }
 };
 template<>
 struct SubsampledConcatAndCut<double,__m128d,1> {
   static __m128d  Concat( __m128d a, __m128d b) {
-    return _mm_blend_pd( _mm_permute_pd(a,1),b,0b00000010);
+    return _mm_shuffle_pd(a,b,0b00001111);
   }
 };
 
