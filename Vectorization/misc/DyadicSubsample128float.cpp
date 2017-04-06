@@ -40,22 +40,19 @@ struct SubsampledConcatAndCut {
 template<>
 struct SubsampledConcatAndCut<float,__m128,0> {
   static __m128  Concat( __m128 a, __m128 b, __m128 c) {
-    return _mm_blend_ps( _mm_permute_ps(a,216),_mm_permute_ps(b,141),
-      0b00001100);
+    return _mm_shuffle_ps(a,b,0b10001000);
   }
 };
 template<>
 struct SubsampledConcatAndCut<float,__m128,1> {
   static __m128  Concat( __m128 a, __m128 b, __m128 c) {
-    return _mm_blend_ps( _mm_permute_ps(a,141),_mm_permute_ps(b,216),
-      0b00001100);
+    return _mm_shuffle_ps(a,b,0b11011101);
   }
 };
 template<>
 struct SubsampledConcatAndCut<float,__m128,2> {
   static __m128  Concat( __m128 a, __m128 b, __m128 c) {
-    auto x = _mm_blend_ps( _mm_permute_ps(a,210),_mm_permute_ps(b,225),
-      0b00001110);
+    auto x = _mm_permute_ps(_mm_shuffle_ps(a,b,0b10000010),0b01111000);
     return _mm_blend_ps( x,_mm_permute_ps(c,57),0b00001000);
   }
 };
