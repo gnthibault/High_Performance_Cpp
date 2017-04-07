@@ -54,9 +54,9 @@ class VectorizedShift<float,__m128,SHIFT> {
   }
 };
 #elif defined USE_AVX2
-template<int Val, class enable=void>
+template<typename T, typename vecT, int Val, class enable=void>
 struct AVX256ConcatandCut {
-  static __m256 Concat(__m256 left, __m256 right) {
+  static vecT Concat(vecT left, vecT right) {
     assert(("Vectorized Shift AVX256 cannot account for shift > 256 bits",
           false));
     return left;
@@ -64,36 +64,78 @@ struct AVX256ConcatandCut {
 };
 
 template<int Val>
-struct AVX256ConcatandCut<Val, typename ctrange<0, 1, Val>::enabled> {
+struct AVX256ConcatandCut<float, __m256, Val,
+    typename ctrange<0, 1, Val>::enabled> {
   static __m256 Concat(__m256 left, __m256 right) {
     return left;
   }
 };
 template<int Val>
-struct AVX256ConcatandCut<Val, typename ctrange<1, 4, Val>::enabled> {
+struct AVX256ConcatandCut<float, __m256, Val,
+    typename ctrange<1, 4, Val>::enabled> {
   static __m256 Concat(__m256 left, __m256 right) {
     return (__m256)_mm256_alignr_epi8(
       (__m256i)_mm256_permute2f128_ps(left,right,33),
-      (__m256i)left, Val*sizeof(int));
+      (__m256i)left, Val*sizeof(float));
   }
 };
 template<int Val>
-struct AVX256ConcatandCut<Val, typename ctrange<4, 5, Val>::enabled> {
+struct AVX256ConcatandCut<float, __m256, Val,
+    typename ctrange<4, 5, Val>::enabled> {
   static __m256 Concat(__m256 left, __m256 right) {
     return _mm256_permute2f128_ps(left,right,33);
   }
 };
 template<int Val>
-struct AVX256ConcatandCut<Val, typename ctrange<5, 8, Val>::enabled> {
+struct AVX256ConcatandCut<float, __m256, Val,
+    typename ctrange<5, 8, Val>::enabled> {
   static __m256 Concat(__m256 left, __m256 right) {
     return (__m256)_mm256_alignr_epi8((__m256i)right,
-      (__m256i)_mm256_permute2f128_ps(left,right,33), (Val-4)*sizeof(int));
+      (__m256i)_mm256_permute2f128_ps(left,right,33), (Val-4)*sizeof(float));
   }
 };
-
 template<int Val>
-struct AVX256ConcatandCut<Val, typename ctrange<8, 9, Val>::enabled> {
+struct AVX256ConcatandCut<float, __m256, Val,
+    typename ctrange<8, 9, Val>::enabled> {
   __m256 static Concat(__m256 left, __m256 right) {
+    return right;
+  }
+};
+template<int Val>
+struct AVX256ConcatandCut<double, __m256d, Val,
+    typename ctrange<0, 1, Val>::enabled> {
+  static __m256d Concat(__m256d left, __m256d right) {
+    return left;
+  }
+};
+template<int Val>
+struct AVX256ConcatandCut<double, __m256d, Val,
+    typename ctrange<1, 2, Val>::enabled> {
+  static __m256d Concat(__m256d left, __m256d right) {
+    return (__m256d)_mm256_alignr_epi8(
+      (__m256i)_mm256_permute2f128_pd(left,right,33),
+      (__m256i)left, Val*sizeof(double));
+  }
+};
+template<int Val>
+struct AVX256ConcatandCut<double, __m256d, Val,
+    typename ctrange<2, 3, Val>::enabled> {
+  static __m256d Concat(__m256d left, __m256d right) {
+    return _mm256_permute2f128_pd(left,right,33);
+  }
+};
+template<int Val>
+struct AVX256ConcatandCut<double, __m256d, Val,
+    typename ctrange<3, 4, Val>::enabled> {
+  static __m256d Concat(__m256d left, __m256d right) {
+    return (__m256d)_mm256_alignr_epi8((__m256i)right,
+      (__m256i)_mm256_permute2f128_pd(left,right,33), (Val-2)*sizeof(double));
+  }
+};
+template<int Val>
+struct AVX256ConcatandCut<double, __m256d, Val,
+    typename ctrange<4, 5, Val>::enabled> {
+  static __m256d Concat(__m256d left, __m256d right) {
     return right;
   }
 };
@@ -103,7 +145,15 @@ class VectorizedConcatAndCut<float,__m256,RIGHT_SHIFT> {
  public:
   //Optimized specific intrinsic for concat / shift / cut in AVX
   static __m256 Concat( __m256 left, __m256 right ) {
-    return AVX256ConcatandCut<RIGHT_SHIFT>::Concat(left,right);
+    return AVX256ConcatandCut<float,__m256,RIGHT_SHIFT>::Concat(left,right);
+  }
+};
+template<int RIGHT_SHIFT>
+class VectorizedConcatAndCut<double,__m256d,RIGHT_SHIFT> {
+ public:
+  //Optimized specific intrinsic for concat / shift / cut in AVX
+  static __m256d Concat( __m256d left, __m256d right ) {
+    return AVX256ConcatandCut<double,__m256d,RIGHT_SHIFT>::Concat(left,right);
   }
 };
 #elif defined USE_NEON

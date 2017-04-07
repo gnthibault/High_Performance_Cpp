@@ -35,6 +35,14 @@ struct MemOp {
     _mm256_store_ps( ptr, value );
   }
 };
+template<typename T, class VecT, int RIGHT_SHIFT>
+class VectorizedConcatAndCut {
+ public:
+  static VecT Concat( VecT left, VecT right ) {
+    assert(false); //Default implementation should not be used
+    return left;
+  }
+};
 
 template<typename T, typename vecT, int Val, class enable=void>
 struct AVX256ConcatandCut {
@@ -84,13 +92,6 @@ struct AVX256ConcatandCut<float, __m256, Val,
   }
 };
 
-template<typename T, class VecT, int RIGHT_SHIFT>
-class VectorizedConcatAndCut {
- public:
-  static VecT Concat( VecT left, VecT right ) {
-    return left;
-  }
-};
 template<int Val>
 struct AVX256ConcatandCut<double, __m256d, Val,
     typename ctrange<0, 1, Val>::enabled> {
