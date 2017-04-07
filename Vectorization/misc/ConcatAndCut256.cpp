@@ -58,7 +58,7 @@ struct AVX256ConcatandCut<float, __m256, Val,
   static __m256 Concat(__m256 left, __m256 right) {
     return (__m256)_mm256_alignr_epi8(
       (__m256i)_mm256_permute2f128_ps(left,right,33),
-      (__m256i)left, Val*sizeof(int));
+      (__m256i)left, Val*sizeof(float));
   }
 };
 template<int Val>
@@ -73,7 +73,7 @@ struct AVX256ConcatandCut<float, __m256, Val,
     typename ctrange<5, 8, Val>::enabled> {
   static __m256 Concat(__m256 left, __m256 right) {
     return (__m256)_mm256_alignr_epi8((__m256i)right,
-      (__m256i)_mm256_permute2f128_ps(left,right,33), (Val-4)*sizeof(int));
+      (__m256i)_mm256_permute2f128_ps(left,right,33), (Val-4)*sizeof(float));
   }
 };
 template<int Val>
@@ -100,11 +100,26 @@ struct AVX256ConcatandCut<double, __m256d, Val,
 };
 template<int Val>
 struct AVX256ConcatandCut<double, __m256d, Val,
-    typename ctrange<1, 4, Val>::enabled> {
+    typename ctrange<1, 2, Val>::enabled> {
   static __m256d Concat(__m256d left, __m256d right) {
     return (__m256d)_mm256_alignr_epi8(
       (__m256i)_mm256_permute2f128_pd(left,right,33),
-      (__m256i)left, Val*sizeof(int));
+      (__m256i)left, Val*sizeof(double));
+  }
+};
+template<int Val>
+struct AVX256ConcatandCut<double, __m256d, Val,
+    typename ctrange<2, 3, Val>::enabled> {
+  static __m256d Concat(__m256d left, __m256d right) {
+    return _mm256_permute2f128_pd(left,right,33);
+  }
+};
+template<int Val>
+struct AVX256ConcatandCut<double, __m256d, Val,
+    typename ctrange<3, 4, Val>::enabled> {
+  static __m256d Concat(__m256d left, __m256d right) {
+    return (__m256d)_mm256_alignr_epi8((__m256i)right,
+      (__m256i)_mm256_permute2f128_pd(left,right,33), (Val-2)*sizeof(double));
   }
 };
 template<int Val>
