@@ -132,7 +132,14 @@ struct SubsampledConcatAndCut<double,__m256d,1> {
     return (__m256d) _mm256_permute2x128_si256(
       _mm256_permute4x64_epi64((__m256i)a,141),
       _mm256_permute4x64_epi64((__m256i)b,216),48);
-;
+  }
+};
+template<>
+struct SubsampledConcatAndCut<double,__m256d,2> {
+  static __m256d  Concat( __m256d a, __m256d b, __m256d c) {
+    auto x = _mm256_permute2x128_si256((__m256i)a,(__m256i)c,97);
+    return _mm256_blend_pd((__m256d)_mm256_permute4x64_epi64(x,180),
+      (__m256d)_mm256_permute4x64_epi64((__m256i)b,225),0b0110);
   }
 };
 
@@ -166,7 +173,7 @@ int main(int argc, char* argvi[]) {
   auto c2 = MemOp::load(v2.data()+8);
 
   MemOp::store(v2.data(),SubsampledConcatAndCut<
-    double,__m256d,PARAM%2>::Concat(a2,b2,c2));
+    double,__m256d,PARAM%4>::Concat(a2,b2,c2));
   std::for_each(v2.data(),v2.data()+4,print);
   std::cout << std::endl;
 
