@@ -121,7 +121,9 @@ struct SubsampledConcatAndCut<float,__m256,7> {
 template<>
 struct SubsampledConcatAndCut<double,__m256d,0> {
   static __m256d  Concat( __m256d a, __m256d b, __m256d c) {
-    return a;
+    return (__m256d) _mm256_permute2x128_si256(
+      _mm256_permute4x64_epi64((__m256i)a,216),
+      _mm256_permute4x64_epi64((__m256i)b,141),48);
   }
 };
 template<>
