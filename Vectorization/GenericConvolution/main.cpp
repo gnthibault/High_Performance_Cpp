@@ -21,6 +21,12 @@ template<> const float MyFilter<float,0,3>::Buf[4] = {1.0f,2.0f,3.0f,4.0f};
 template<> const float MyFilter<float,0,1>::Buf[2] = {1.0f,2.0f};
 template<> const float MyFilter<float,2,2>::Buf[5] = {1.0f,2.0f,3.0f,4.0f,5.0f};
 template<> const float MyFilter<float,3,3>::Buf[7] = {1.0f,2.0f,3.0f,4.0f,5.0f,6.0f,7.0f};
+template<> const double MyFilter<double,1,1>::Buf[3] = {1.0f,2.0f,3.0f};
+template<> const double MyFilter<double,0,3>::Buf[4] = {1.0f,2.0f,3.0f,4.0f};
+template<> const double MyFilter<double,0,1>::Buf[2] = {1.0f,2.0f};
+template<> const double MyFilter<double,2,2>::Buf[5] = {1.0f,2.0f,3.0f,4.0f,5.0f};
+template<> const double MyFilter<double,3,3>::Buf[7] = {1.0f,2.0f,3.0f,4.0f,5.0f,6.0f,7.0f};
+
 
 //build with
 //g++ ./main.cpp -std=c++14 -O3 -msse2 -o test -DUSE_SSE
@@ -33,52 +39,52 @@ template<> const float MyFilter<float,3,3>::Buf[7] = {1.0f,2.0f,3.0f,4.0f,5.0f,6
 //adb shell chmod 555 /data/local/tmp/test
 //adb shell /data/local/tmp/test
 
-int main(int argc, char* argv[]) {
-
+template<typename T>
+void Checker() {
   for (int i = 1; i<=512 ; i++) {
-    std::vector<float,PackAllocator<float>> input(i);
-    std::vector<float,PackAllocator<float>> output(input.size(),0);
-    std::vector<float,PackAllocator<float>> control(input.size(),0);
+    std::vector<T,PackAllocator<T>> input(i);
+    std::vector<T,PackAllocator<T>> output(input.size(),0);
+    std::vector<T,PackAllocator<T>> control(input.size(),0);
 
     //Fill input vector with ordered values
     std::iota(input.begin(), input.end(),1.0f);
 
     //Check if results for the naive and vectorized version are equal
     bool isOK = true;
-    Convolution< MyFilter<float,1,1> >::Convolve( input.data(), output.data(), input.size() );
-    Convolution< MyFilter<float,1,1> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
+    Convolution< MyFilter<T,1,1> >::Convolve( input.data(), output.data(), input.size() );
+    Convolution< MyFilter<T,1,1> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
     isOK &= std::equal(control.begin(), control.end(), output.begin() );
     
     //Reset values
     std::fill(output.begin(), output.end(), 0);
     std::fill(control.begin(), control.end(), 0);
 
-    Convolution< MyFilter<float,0,1> >::Convolve( input.data(), output.data(), input.size() );
-    Convolution< MyFilter<float,0,1> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
+    Convolution< MyFilter<T,0,1> >::Convolve( input.data(), output.data(), input.size() );
+    Convolution< MyFilter<T,0,1> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
     isOK &= std::equal(control.begin(), control.end(), output.begin() );
 
     //Reset values
     std::fill(output.begin(), output.end(), 0);
     std::fill(control.begin(), control.end(), 0);
 
-    Convolution< MyFilter<float,0,3> >::Convolve( input.data(), output.data(), input.size() );
-    Convolution< MyFilter<float,0,3> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
+    Convolution< MyFilter<T,0,3> >::Convolve( input.data(), output.data(), input.size() );
+    Convolution< MyFilter<T,0,3> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
     isOK &= std::equal(control.begin(), control.end(), output.begin() );
 
     //Reset values
     std::fill(output.begin(), output.end(), 0);
     std::fill(control.begin(), control.end(), 0);
 
-    Convolution< MyFilter<float,2,2> >::Convolve( input.data(), output.data(), input.size() );
-    Convolution< MyFilter<float,2,2> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
+    Convolution< MyFilter<T,2,2> >::Convolve( input.data(), output.data(), input.size() );
+    Convolution< MyFilter<T,2,2> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
     isOK &= std::equal(control.begin(), control.end(), output.begin() );
 
     //Reset values
     std::fill(output.begin(), output.end(), 0);
     std::fill(control.begin(), control.end(), 0);
 
-    Convolution< MyFilter<float,3,3> >::Convolve( input.data(), output.data(), input.size() );
-    Convolution< MyFilter<float,3,3> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
+    Convolution< MyFilter<T,3,3> >::Convolve( input.data(), output.data(), input.size() );
+    Convolution< MyFilter<T,3,3> >::NaiveConvolve( input.data(), control.data(), 0, input.size(), input.size() );
     isOK &= std::equal(control.begin(), control.end(), output.begin() );
 
     //Reset values
@@ -91,6 +97,11 @@ int main(int argc, char* argv[]) {
       std::cout << " WARNING : There may be a bug for size "<<i<<std::endl;
     }
   }
+}
+
+int main(int argc, char* argv[]) {
+  Checker<float>();
+  Checker<double>();
   return EXIT_SUCCESS;
 }
 

@@ -60,6 +60,16 @@ class VectorizedMemOp<float,float32x4_t> {
     vst1q_f32( ptr, value );
   }
 };
+template<>
+class VectorizedMemOp<double,float64x2_t> {
+ public:
+ static float64x2_t load( const double* ptr ) {
+    return vld1q_f64( ptr );
+  }
+  static void store( double* ptr, float64x2_t value) {
+    vst1q_f64( ptr, value );
+  }
+};
 #endif
 #endif //MEMORYHELPER_H
 

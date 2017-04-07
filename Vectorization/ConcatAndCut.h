@@ -115,5 +115,13 @@ class VectorizedConcatAndCut<float,float32x4_t,RIGHT_SHIFT> {
     return vextq_f32( left, right, RIGHT_SHIFT) ;
   }
 };
+template<int RIGHT_SHIFT>
+class VectorizedConcatAndCut<double,float64x2_t,RIGHT_SHIFT> {
+ public:
+  //Optimized specific intrinsic for concat / shift / cut in AVX
+  static float64x2_t Concat( float64x2_t left, float64x2_t right ) {
+    return vextq_f64( left, right, RIGHT_SHIFT) ;
+  }
+};
 #endif
 #endif // CONCATANDCUT_H
