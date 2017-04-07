@@ -129,7 +129,10 @@ struct SubsampledConcatAndCut<double,__m256d,0> {
 template<>
 struct SubsampledConcatAndCut<double,__m256d,1> {
   static __m256d  Concat( __m256d a, __m256d b, __m256d c) {
-    return a;
+    return (__m256d) _mm256_permute2x128_si256(
+      _mm256_permute4x64_epi64((__m256i)a,141),
+      _mm256_permute4x64_epi64((__m256i)b,216),48);
+;
   }
 };
 
@@ -164,7 +167,7 @@ int main(int argc, char* argvi[]) {
 
   MemOp::store(v2.data(),SubsampledConcatAndCut<
     double,__m256d,PARAM%2>::Concat(a2,b2,c2));
-  std::for_each(v2.data(),v2.data()+2,print);
+  std::for_each(v2.data(),v2.data()+4,print);
   std::cout << std::endl;
 
   return EXIT_SUCCESS;
