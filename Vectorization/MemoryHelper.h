@@ -49,6 +49,16 @@ class VectorizedMemOp<float,__m256> {
     _mm256_store_ps( ptr, value );
   }
 };
+template<>
+class VectorizedMemOp<double,__m256d> {
+ public:
+  static __m256d load( const double* ptr ) {
+    return _mm256_load_pd( ptr );
+  }
+  static void store( double* ptr, __m256d value) {
+    _mm256_store_pd( ptr, value );
+  }
+};
 #elif defined USE_NEON
 template<>
 class VectorizedMemOp<float,float32x4_t> {
