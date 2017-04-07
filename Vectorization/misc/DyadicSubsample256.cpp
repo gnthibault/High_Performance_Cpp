@@ -142,7 +142,14 @@ struct SubsampledConcatAndCut<double,__m256d,2> {
       (__m256d)_mm256_permute4x64_epi64((__m256i)b,225),0b0110);
   }
 };
-
+template<>
+struct SubsampledConcatAndCut<double,__m256d,3> {
+  static __m256d  Concat( __m256d a, __m256d b, __m256d c) {
+    auto x = _mm256_permute2x128_si256((__m256i)a,(__m256i)c,97);
+    return _mm256_blend_pd((__m256d)_mm256_permute4x64_epi64(x,225),
+      (__m256d)_mm256_permute4x64_epi64((__m256i)b,180),0b0110);
+  }
+};
 typedef  boost::alignment::aligned_allocator<int,sizeof(__m256)>
   PackAllocator;
 typedef std::vector<float,PackAllocator> fvector;
