@@ -53,6 +53,16 @@ class VectorizedShift<float,__m128,SHIFT> {
     return (__m128)_mm_srli_si128( (__m128i)input, SHIFT );
   }
 };
+template<int SHIFT>
+class VectorizedShift<double,__m128d,SHIFT> {
+ public:
+  constexpr static __m128d LeftShift( __m128d input ) {
+    return (__m128d)_mm_slli_si128( (__m128i)input, SHIFT );
+  }
+  constexpr static __m128d RightShift( __m128d input ) {
+    return (__m128d)_mm_srli_si128( (__m128i)input, SHIFT );
+  }
+};
 #elif defined USE_AVX2
 template<typename T, typename vecT, int Val, class enable=void>
 struct AVX256ConcatandCut {
