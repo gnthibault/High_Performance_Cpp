@@ -58,13 +58,18 @@ struct SubsampledConcatAndCut<float,__m256,2> {
     a=_mm256_blend_ps(a,b,0b01111000);
     return _mm256_blend_ps(a,_mm256_permutevar8x32_ps(c,
       _mm256_set_epi32(0,0,0,0,0,0,0,0)),0b10000000);
-
   }
 };
 template<>
 struct SubsampledConcatAndCut<float,__m256,3> {
   static __m256  Concat( __m256 a, __m256 b, __m256 c) {
-    return a;
+    a=_mm256_permutevar8x32_ps(a,
+      _mm256_set_epi32(0,0,0,0,0,7,5,3));
+    b=_mm256_permutevar8x32_ps(b,
+      _mm256_set_epi32(0,7,5,3,1,0,0,0));
+    a=_mm256_blend_ps(a,b,0b01111000);
+    return _mm256_blend_ps(a,_mm256_permutevar8x32_ps(c,
+      _mm256_set_epi32(1,0,0,0,0,0,0,0)),0b10000000);
   }
 };
 template<>
